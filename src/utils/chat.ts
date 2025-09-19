@@ -1,0 +1,44 @@
+type SendMessageSchemas = {
+  id: number;
+  message: string;
+};
+
+export async function* sendMessage(
+  params: SendMessageSchemas
+): AsyncGenerator<string, void, unknown> {
+  const res = await fetch("http://localhost:8000/chat/create_chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!res.body) return;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data:")) {
+        const jsonStr = line.replace(/^data:\s*/, "");
+        const dataObj = JSON.parse(jsonStr);
+        if (dataObj.content) {
+          yield dataObj.content; // 用 yield 替代 onChunk 回调
+        }
+      } else if (line.startsWith("event: done")) {
+        return; // 提前结束 generator
+      }
+    }
+  }
+}
