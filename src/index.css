@@ -1,2 +1,23 @@
 @import "tailwindcss";
 @plugin "daisyui";
+
+:root {
+  --Ai-think-text: #6b7280;
+  --Ai-think-bg: rgba(229, 231, 235, 0.7);
+  --Ai-content-bg: #f3f4f6;
+  --Ai-content-text: #1f2937;
+  --markdown-head-bg: #e2e8f0;
+}
+
+[data-theme="dark"] {
+  --Ai-think-text: #9ca3af;
+  --Ai-think-bg: rgba(107, 114, 128, 0.4);
+  --Ai-content-bg: #1f2937;
+  --Ai-content-text: #f3f4f6;
+  --markdown-head-bg: rgb(31, 31, 31);
+}
+
+:root,
+[data-theme="dark"] {
+  transition: all 0.3s ease, color 0.3s ease;
+}

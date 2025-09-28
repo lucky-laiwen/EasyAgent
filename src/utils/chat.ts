@@ -6,7 +6,7 @@ type SendMessageSchemas = {
 export async function* sendMessage(
   params: SendMessageSchemas
 ): AsyncGenerator<string, void, unknown> {
-  const res = await fetch("http://localhost:8000/chat/create_chat", {
+  const res = await fetch("http://localhost:8000/chat/stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -34,7 +34,7 @@ export async function* sendMessage(
         const jsonStr = line.replace(/^data:\s*/, "");
         const dataObj = JSON.parse(jsonStr);
         if (dataObj.content) {
-          yield dataObj.content; // 用 yield 替代 onChunk 回调
+          yield dataObj; // 用 yield 替代 onChunk 回调
         }
       } else if (line.startsWith("event: done")) {
         return; // 提前结束 generator

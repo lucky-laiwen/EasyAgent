@@ -3,7 +3,7 @@ import { login } from "@/api/user";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setUser } from "@/store/modules/userStore";
-
+import Logo from "@/assets/EasyAgent-Icon.svg";
 type FieldType = {
   username?: string;
   password?: string;
@@ -31,39 +31,47 @@ const Login = () => {
   };
 
   return (
-    <div className="flex justify-center items-center h-screen gap-4 box">
-      <div className="flex">
-        <Form
-          name="basic"
-          labelCol={{ span: 8 }}
-          wrapperCol={{ span: 16 }}
-          style={{ maxWidth: 600 }}
-          initialValues={{ remember: true }}
-          onFinish={onFinish}
-          autoComplete="off"
-        >
-          <Form.Item<FieldType>
-            label="username"
-            name="username"
-            rules={[{ required: true, message: "Please input your username!" }]}
-          >
-            <Input autoComplete="off" />
-          </Form.Item>
+    <div className="flex justify-center items-center h-screen">
+      <div className="flex bg-white/30 rounded-md w-[50%] shadow-lg pr-4 gap-4">
+        <img src={Logo} alt="" className="w-[50%] h-full rounded-md" />
 
-          <Form.Item<FieldType>
-            label="password"
-            name="password"
-            rules={[{ required: true, message: "Please input your password!" }]}
+        <div className="px-[30px] py-[50px] w-[50%]">
+          <div className="text-[40px] font-bold text-center">
+            欢迎登录 EasyAgent
+          </div>
+          <Form
+            name="basic"
+            initialValues={{ remember: true }}
+            onFinish={onFinish}
+            autoComplete="off"
+            className="!mt-[50px]"
           >
-            <Input.Password autoComplete="new-password" />
-          </Form.Item>
+            <div>用户名：</div>
+            <Form.Item<FieldType>
+              name="username"
+              rules={[
+                { required: true, message: "Please input your username!" },
+              ]}
+            >
+              <Input autoComplete="off" className="!w-full h" />
+            </Form.Item>
+            <div>密码：</div>
+            <Form.Item<FieldType>
+              name="password"
+              rules={[
+                { required: true, message: "Please input your password!" },
+              ]}
+            >
+              <Input.Password autoComplete="new-password" />
+            </Form.Item>
 
-          <Form.Item label={null}>
-            <Button type="primary" htmlType="submit">
-              Submit
-            </Button>
-          </Form.Item>
-        </Form>
+            <Form.Item label={null}>
+              <Button type="primary" htmlType="submit">
+                Submit
+              </Button>
+            </Form.Item>
+          </Form>
+        </div>
       </div>
     </div>
   );

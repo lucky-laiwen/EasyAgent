@@ -22,16 +22,17 @@ const EAButton = (props: Schemas) => {
           <span
             className={`${
               loading
-                ? " loading loading-spinner opcity-1 w-[18px] h-[18px]"
-                : "opcity-0"
+                ? "loading loading-spinner opacity-100 w-[18px] h-[18px]"
+                : "opacity-0"
             } transition-all duration-300`}
             style={{
               position: "absolute",
               top: "50%",
               left: "-25px",
-              transform: "translateY(-60%)",
+              transform: "translateY(-50%)",
             }}
           ></span>
+
           {text}
         </div>
       </button>
