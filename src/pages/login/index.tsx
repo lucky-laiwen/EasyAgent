@@ -1,16 +1,14 @@
 import { Button, Form, Input } from "antd";
 import { login } from "@/api/user";
 import { useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { setUser } from "@/store/modules/userStore";
 import Logo from "@/assets/EasyAgent-Icon.svg";
+import { setUser } from "@/store/store";
 type FieldType = {
   username?: string;
   password?: string;
 };
 
 const Login = () => {
-  const dispatch = useDispatch(); // ✅ 获取 dispatch
   const navigate = useNavigate();
 
   const onFinish = async (values: FieldType) => {
@@ -24,7 +22,7 @@ const Login = () => {
       const result = await login(payload);
       if (result.data.success) {
         localStorage.setItem("token", result.data.data.access_token);
-        dispatch(setUser(result.data.data.user));
+        setUser(result.data.data.user);
         navigate("/");
       }
     }
@@ -32,10 +30,14 @@ const Login = () => {
 
   return (
     <div className="flex justify-center items-center h-screen">
-      <div className="flex bg-white/30 rounded-md w-[50%] shadow-lg pr-4 gap-4">
-        <img src={Logo} alt="" className="w-[50%] h-full rounded-md" />
+      <div className="flex  rounded-md w-[50%] shadow-lg pr-4">
+        <img
+          src={Logo}
+          alt=""
+          className="w-[50%] h-full rounded-tl-md rounded-bl-md"
+        />
 
-        <div className="px-[30px] py-[50px] w-[50%]">
+        <div className="px-[30px] bg-white/30 py-[50px] w-[50%]">
           <div className="text-[40px] font-bold text-center">
             欢迎登录 EasyAgent
           </div>

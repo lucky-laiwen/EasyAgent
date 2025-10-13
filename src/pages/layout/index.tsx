@@ -1,24 +1,23 @@
 import React, { useEffect, useRef, useState } from "react";
-import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
-import { Button, Layout, Input, Spin } from "antd";
-import { getChatRecords, getChatContent, createChat } from "@/api/chat";
+import { Layout, Spin } from "antd";
+import {
+  getChatRecords,
+  getChatContent,
+  createChat,
+  generateChatTitle,
+} from "@/api/chat";
 import EAButton from "@/components/EAButton";
+import EAInput from "@/components/EAInput";
 import { useNavigate } from "react-router-dom";
 import EAMenu from "@/components/EAMenu/index";
 import EAMarkdown from "@/components/EAMarkdown/EAMarkdown";
-import { useDispatch } from "react-redux";
-import {
-  addMessage,
-  resetMessages,
-  setMessages,
-} from "@/store/modules/messageStore";
-import { useStreamAIMessage } from "@/utils/stream";
-import { useSelector } from "react-redux";
-import { type RootState } from "@/store/index";
+import { addMessage, setMessages, useStore } from "@/store/store";
 import gsap from "gsap";
 import EATheme from "@/components/EAThema";
-const { Sider, Content } = Layout;
-
+import { ScrollToPlugin } from "gsap/ScrollToPlugin";
+import { useStreamAIMessage } from "@/utils/stream";
+const { Content } = Layout;
+gsap.registerPlugin(ScrollToPlugin);
 export interface ChatItem {
   id: number;
   sender: 0 | 1;
@@ -30,34 +29,35 @@ export interface ChatItem {
 }
 
 const Home: React.FC = () => {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const message = useSelector(
-    (state: RootState) => state.message.messages ?? []
-  );
-  const [collapsed, setCollapsed] = useState(false);
+  const { streamAIMessage } = useStreamAIMessage();
+  const message = useStore((state) => state.messages) ?? [];
   const [chatList, setChatList] = useState<ChatItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
-  const { streamAIMessage } = useStreamAIMessage();
   const [selectedMenuKey, setSelectedMenuKey] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const inputWrapperRef = useRef<HTMLDivElement>(null);
   const [pageLoading, setPageLoading] = useState(false);
+  const messageContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
-  useEffect(() => {
-    if (!inputWrapperRef.current) return;
+  // 将对话聊天滚动到最底部
+  const scrollToBottom = () => {
+    const container = messageContainerRef.current;
+    if (!container) return;
+    gsap
+      .to(container, {
+        scrollTop: container.scrollHeight,
+        duration: 1.5,
+        ease: "power2.inOut",
+        overwrite: "auto", // 自动覆盖当前滚动动画
+      })
+      .then(() => {
+        gsap.killTweensOf(container);
+      });
+  };
 
-    // 根据 message 长度判断目标 margin
-    const targetMarginTop =
-      message.length > 0 ? "auto" : window.innerHeight * 0; // 20% 高度
-
-    gsap.to(inputWrapperRef.current, {
-      marginTop: targetMarginTop,
-      duration: 0.5,
-      ease: "power2.out",
-    });
-  }, [message.length]); // 监听 message 长度变化
   // 获取历史记录
   const getHisttoryList = async () => {
     const res = await getChatRecords({});
@@ -67,6 +67,22 @@ const Home: React.FC = () => {
   };
   useEffect(() => {
     getHisttoryList();
+    const container = messageContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop } = container;
+      const isNotAtBottom = scrollTop !== 0;
+      setShowScrollButton(isNotAtBottom);
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    // 初始化判断
+    handleScroll();
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
   }, []);
   if (!localStorage.getItem("token")) {
     navigate("/login");
@@ -83,7 +99,7 @@ const Home: React.FC = () => {
         type: item.think_content ? "think" : "text",
         finished: true,
       }));
-      dispatch(setMessages(messagesWithType));
+      setMessages(messagesWithType);
       setCurrentChatId(id);
       setPageLoading(false);
     } else {
@@ -94,92 +110,113 @@ const Home: React.FC = () => {
   // 发送消息（流式接收）
   const handleSend = async () => {
     if (!inputValue.trim()) return;
-
+    const sendText = inputValue;
+    setInputValue("");
     setLoading(true);
-    const result = await createChat({
-      id: currentChatId ? currentChatId : Date.now(),
-      message: inputValue,
+
+    // 插入用户信息
+    addMessage({
+      id: Date.now(),
+      sender: 0,
+      content: sendText,
+      finished: true,
     });
 
-    if (result.data.success) {
-      getHisttoryList();
-      setCurrentChatId(result.data.data.chat_id);
-      setSelectedMenuKey(result.data.data.chat_id.toString());
+    // 获取 chatId（如果没有就用时间戳）
+    const chatId =
+      currentChatId ??
+      Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+    // 1. 创建聊天请求
+    const createChatPromise = createChat({
+      id: chatId,
+      message: sendText,
+    });
 
-      // 用户消息
-      dispatch(
-        addMessage({
-          id: result.data.data.id,
-          sender: 0,
-          content: inputValue,
-        })
-      );
-      const messageToSend = inputValue;
-      setInputValue("");
-      // 流式消息
-      await streamAIMessage(result.data.data.chat_id, messageToSend);
-    }
+    createChatPromise
+      .then((result) => {
+        if (result.data.success) {
+          const chatId = result.data.data.chat_id;
+          setCurrentChatId(chatId);
+          setSelectedMenuKey(chatId.toString());
 
-    setLoading(false);
+          // 立即启动流式消息，不等待标题更新
+          streamAIMessage(chatId, sendText).then(() =>
+            setTimeout(scrollToBottom, 200)
+          );
+
+          // 单独更新标题
+          if (message.length === 2) {
+            generateChatTitle({
+              id: chatId,
+              message: sendText,
+            }).then((res) => {
+              if (res.data.success) getHisttoryList();
+            });
+          }
+        }
+      })
+      .finally(() => setLoading(false));
   };
 
   return (
-    <Layout>
-      <Sider
-        trigger={null}
-        collapsible
-        collapsed={collapsed}
-        className="h-screen p-[20px] !bg-base-200 overflow-y-auto border-r-[10px] border-base-300"
-      >
+    <div className="flex h-screen">
+      <div className="flex flex-col justify-between pt-[20px] overflow-y-auto border-r-[10px] border-base-300 w-[260px] flex-shrink-0">
         <EAMenu
-          className="max-h-[calc(100vh-328px)] overflow-y-auto !bg-[#fff] !rounded-[10px]"
+          className="max-h-[calc(100vh-328px)] overflow-y-auto !bg-[transparent]"
           chatList={chatList}
           handleChatClick={handleChatClick}
           selectedKey={selectedMenuKey}
           onSelectedKeyChange={setSelectedMenuKey}
+          getHisttoryList={getHisttoryList}
         />
-        <Button
-          type="text"
-          icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-          onClick={() => setCollapsed(!collapsed)}
-          style={{ fontSize: "16px", width: 64, height: 64 }}
-        />
-        <EAButton
-          text="退出登录"
-          onClick={() => {
-            localStorage.removeItem("token");
-            navigate("/login");
-          }}
-          className="mt-[auto]"
-        />
-        <EAButton
-          text="创建新会话"
-          onClick={() => {
-            dispatch(resetMessages());
-            setCurrentChatId(null);
-            setSelectedMenuKey(""); // 清空菜单选中
-          }}
-          className="mt-[auto]"
-        />
-        <EATheme />
-      </Sider>
+        <div className="flex flex-col">
+          <EAButton
+            text="退出登录"
+            onClick={() => {
+              localStorage.removeItem("token");
+              navigate("/login");
+            }}
+            className="mt-[auto]"
+          />
+          <EAButton
+            text="创建新会话"
+            onClick={() => {
+              setMessages([]);
+              setCurrentChatId(null);
+              setSelectedMenuKey(""); // 清空菜单选中
+            }}
+            className="mt-[auto]"
+          />
+          <EATheme />
+        </div>
+      </div>
       <Layout>
         <Spin spinning={pageLoading}>
-          <Content
-            style={{
-              padding: 24,
-              minHeight: 280,
-              overflow: "auto",
-              height: "100vh",
-            }}
-            className="flex flex-col bg-base-200 justify-center gap-[20px] "
-          >
-            <div className="overflow-y-auto w-full">
-              {message.map((item) => {
+          <Content className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 gap-[20px] relative">
+            <div
+              ref={messageContainerRef}
+              className="overflow-y-auto w-[100%] px-[20%] flex flex-col-reverse"
+            >
+              <div
+                className={`absolute top-[85%] right-[18%] z-10 transition-opacity duration-300 ${
+                  showScrollButton
+                    ? "opacity-100"
+                    : "opacity-0 pointer-events-none"
+                }`}
+              >
+                <button
+                  className="btn btn-lg btn-circle btn-primary"
+                  onClick={scrollToBottom}
+                >
+                  F
+                </button>
+              </div>
+
+              {[...message].reverse().map((item) => {
                 return (
-                  <div key={item.id} className="w-full flex flex-col mb-4">
+                  <div key={item.id} className="w-full flex flex-col mb-4 ">
                     {item.think_content && (
-                      <div className="px-3 max-w-[80%] py-2 rounded-lg rounded-bl-none mt-2 bg-[var(--Ai-think-bg)] text-[var(--Ai-think-text)] text-sm italic">
+                      <div className="px-3 w-[100%] py-2 rounded-lg rounded-bl-none rounded-br-none mt-2 bg-[var(--Ai-think-bg)] text-[var(--Ai-think-text)] text-sm italic">
                         <EAMarkdown
                           content={item.think_content}
                           showCursor={!item.finished && item.sender === 1}
@@ -188,10 +225,10 @@ const Home: React.FC = () => {
                     )}
                     {item.content && (
                       <div
-                        className={`px-4 py-2  max-w-[80%] leading-8 ${
+                        className={`px-4 py-2   leading-8 ${
                           item.sender === 0
-                            ? "bg-blue-500 text-white rounded-lg ml-auto"
-                            : "bg-[var(--Ai-content-bg)] rounded-lg rounded-tl-none text-[var(--Ai-content-text)] mr-auto"
+                            ? "bg-blue-500 text-white msx-w-[100%] rounded-lg ml-auto"
+                            : "bg-[var(--Ai-content-bg)] w-[100%] rounded-lg rounded-tl-none rounded-tr-none text-[var(--Ai-content-text)] mr-auto"
                         }`} // <-- 关键
                       >
                         <EAMarkdown
@@ -207,19 +244,21 @@ const Home: React.FC = () => {
 
             <div
               ref={inputWrapperRef}
-              className="flex justify-center items-center w-full"
+              className={`flex justify-center items-center w-full translation-all duration-500 transform-gpu mt-[20px] ${
+                message.length > 0 ? "translate-y-[0%]" : ""
+              }`}
             >
-              <Input
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                className="!h-[46px] !w-[50%]"
+              <EAInput
+                inputValue={inputValue}
+                setInputValue={setInputValue}
+                sendMessage={handleSend}
+                loading={loading}
               />
-              <EAButton text="发送" onClick={handleSend} loading={loading} />
             </div>
           </Content>
         </Spin>
       </Layout>
-    </Layout>
+    </div>
   );
 };
 

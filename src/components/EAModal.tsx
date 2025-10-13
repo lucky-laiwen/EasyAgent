@@ -7,6 +7,7 @@ type Schemas = {
   onCancel?: () => void;
   open?: boolean;
   fotter?: React.ReactNode;
+  title?: string;
 };
 
 const EAModal: React.FC<Schemas> = ({
@@ -16,6 +17,7 @@ const EAModal: React.FC<Schemas> = ({
   onCancel,
   open = false,
   fotter,
+  title,
 }) => {
   return (
     <>
@@ -31,9 +33,13 @@ const EAModal: React.FC<Schemas> = ({
       {/* Modal内容 */}
       <div className="modal">
         <div className={`modal-box ${className}`} style={style}>
-          <form method="dialog">
+          <form
+            method="dialog"
+            className="flex justify-between items-center mb-4"
+          >
+            <div className="text-lg font-semibold">{title}</div>
             <button
-              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+              className="btn btn-sm btn-circle btn-ghost"
               onClick={onCancel}
             >
               ✕

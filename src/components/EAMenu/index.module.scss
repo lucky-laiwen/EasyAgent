@@ -1,7 +1,13 @@
 .menu {
   :global {
     .ant-menu-title-content {
-      color: rgb(var(--b1-content)) !important;
+      color: var(--chat-text) !important;
+    }
+    .ant-menu-item-selected {
+      background-color: var(--Ai-think-bg) !important;
+    }
+    .ant-menu-item-active {
+      background-color: var(--Ai-think-bg) !important;
     }
   }
 }

@@ -5,80 +5,77 @@ import {
   oneDark,
   oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
-import styles from "./index.module.scss";
-import { useSelector } from "react-redux";
-import { type RootState } from "@/store";
+import { useStore } from "@/store/store";
+
+// 单独组件，处理每个代码块
+const CodeBlock: React.FC<{ language: string; value: string }> = ({
+  language,
+  value,
+}) => {
+  const theme = useStore((state) => state.theme);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      })
+      .catch((err) => console.error("复制失败:", err));
+  };
+
+  return (
+    <div className="relative group my-2">
+      <div className="absolute w-full h-[calc(100%-10px)] flex justify-between pt-[0px]">
+        <div className="sticky flex items-center justify-between top-0 w-full h-[40px] rounded-tl-lg rounded-tr-lg bg-[var(--markdown-head-bg)] px-4">
+          <div className="text-[var(--Ai-content-text)]">{language}</div>
+          <button
+            onClick={handleCopy}
+            className="btn btn-xs btn-outline text-[var(--Ai-content-text)]"
+          >
+            {copied ? "✅ 已复制" : "复制"}
+          </button>
+        </div>
+      </div>
+      <SyntaxHighlighter
+        style={theme === "light" ? oneLight : oneDark}
+        language={language}
+        PreTag="div"
+        className="rounded-lg !pt-[50px]"
+      >
+        {value}
+      </SyntaxHighlighter>
+    </div>
+  );
+};
+
 const EAMarkdown: React.FC<{
   content?: string;
   showCursor?: boolean;
   className?: string;
-}> = ({ content, showCursor, className }) => {
-  const [copied, setCopied] = useState(false);
-  const theme = useSelector((state: RootState) => state.theme.theme);
+}> = ({ content }) => {
   return (
-    <span className={`${showCursor ? styles["with-cursor"] : ""} ${className}`}>
+    <div>
       <ReactMarkdown
         components={{
-          code: ({ inline, className, children, ...props }: any) => {
+          code({ inline, className, children }: any) {
             const match = /language-(\w+)/.exec(className || "");
             const codeString = String(children).replace(/\n$/, "");
 
-            const handleCopy = () => {
-              navigator.clipboard
-                .writeText(codeString)
-                .then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1200);
-                })
-                .catch((err) => console.error("复制失败:", err));
-            };
-
             return !inline && match ? (
-              <div className="relative group my-2">
-                {/* 包裹层，保证 sticky 生效 */}
-                <div className="absolute w-full h-[calc(100%)] flex justify-between pt-[0px]">
-                  {/* 生成的语言 */}
-                  <div className="sticky flex items-center justify-between top-0 w-full h-[40px] rounded-tl-lg rounded-tr-lg bg-[var(--markdown-head-bg)] px-4">
-                    <div className="text-[var(--Ai-content-text)]">
-                      {match[1]}
-                    </div>
-                    <button
-                      onClick={handleCopy}
-                      className="btn btn-xs btn-outline text-[var(--Ai-content-text)]"
-                    >
-                      {copied ? "✅ 已复制" : "复制"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 代码框 */}
-                <SyntaxHighlighter
-                  style={
-                    theme === "light" ? (oneLight as any) : (oneDark as any)
-                  }
-                  language={match[1]}
-                  PreTag="div"
-                  className="rounded-lg !pt-[50px]"
-                  {...props}
-                >
-                  {codeString}
-                </SyntaxHighlighter>
-              </div>
+              <CodeBlock language={match[1]} value={codeString} />
             ) : (
               <code className="px-1 py-0.5 bg-[var(--Ai-think-bg)] rounded text-sm">
                 {children}
               </code>
             );
           },
-
-          text({ ...props }) {
-            return <span className="leading-[20px]">{props.children}</span>;
-          },
         }}
       >
         {content}
       </ReactMarkdown>
-    </span>
+    </div>
   );
 };
 

@@ -1,4 +1,5 @@
 type Schemas = {
+  icon?: React.ReactNode;
   loading?: boolean;
   className?: string;
   onClick?: () => void;
@@ -7,7 +8,7 @@ type Schemas = {
 };
 
 const EAButton = (props: Schemas) => {
-  const { loading, className, onClick, style, text } = props;
+  const { loading, className, onClick, style, text, icon } = props;
   return (
     <>
       <button
@@ -19,6 +20,7 @@ const EAButton = (props: Schemas) => {
         disabled={loading}
       >
         <div className="relative">
+          {icon}
           <span
             className={`${
               loading

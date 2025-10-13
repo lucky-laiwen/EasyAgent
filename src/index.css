@@ -1,23 +1,50 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+/* ================== 颜色变量 ================== */
+
+/* 🌞 白天模式（light） */
 :root {
   --Ai-think-text: #6b7280;
   --Ai-think-bg: rgba(229, 231, 235, 0.7);
   --Ai-content-bg: #f3f4f6;
   --Ai-content-text: #1f2937;
   --markdown-head-bg: #e2e8f0;
+  --chat-gradient-1: #e5e7eb; /* 渐变亮灰 */
+  --chat-gradient-2: #d1d5db;
+  --chat-bg: rgba(255, 255, 255, 0.8);
+  --chat-text: #1f2937;
+  --chat-placeholder: #9ca3af;
+  --chat-placeholder-focus: #d1d5db;
+  --chat-border: #e5e7eb;
+  --chat-button-bg: linear-gradient(to top, #f9fafb, #e5e7eb, #f9fafb);
+  --chat-button-icon: #6b7280;
+  --chat-button-icon-hover: #6b7280;
+  --chat-tag-bg: #f3f4f6;
+  --chat-tag-border: #e5e7eb;
+  --scroll-thumb: #cbd5e1;
+  --scroll-thumb-hover: #94a3b8;
 }
 
+/* 🌙 夜间模式（dark） */
 [data-theme="dark"] {
   --Ai-think-text: #9ca3af;
   --Ai-think-bg: rgba(107, 114, 128, 0.4);
   --Ai-content-bg: #1f2937;
   --Ai-content-text: #f3f4f6;
   --markdown-head-bg: rgb(31, 31, 31);
-}
-
-:root,
-[data-theme="dark"] {
-  transition: all 0.3s ease, color 0.3s ease;
+  --chat-gradient-1: #7e7e7e;
+  --chat-gradient-2: #363636;
+  --chat-bg: rgba(0, 0, 0, 0.5);
+  --chat-text: #ffffff;
+  --chat-placeholder: #f3f6fd;
+  --chat-placeholder-focus: #363636;
+  --chat-border: #363636;
+  --chat-button-bg: linear-gradient(to top, #292929, #555555, #292929);
+  --chat-button-icon: #8b8b8b;
+  --chat-button-icon-hover: #f3f6fd;
+  --chat-tag-bg: #1b1b1b;
+  --chat-tag-border: #363636;
+  --scroll-thumb: #888;
+  --scroll-thumb-hover: #555;
 }

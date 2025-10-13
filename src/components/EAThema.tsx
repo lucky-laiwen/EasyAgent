@@ -1,41 +1,23 @@
-import { useEffect, useState } from "react";
-import { useDispatch } from "react-redux";
-import { setTheme } from "@/store/modules/themeStore";
+import { useEffect } from "react";
+import { useStore, setTheme } from "@/store/store";
 const EATheme = () => {
-  const [isDark, setIsDark] = useState(false);
-  const dispatch = useDispatch();
+  const theme = useStore((state) => state.theme);
 
   useEffect(() => {
-    const theme = window.matchMedia("(prefers-color-scheme: dark)");
-
-    // 首次加载时
-    const initialTheme = theme.matches ? "dark" : "light";
-    document.documentElement.setAttribute("data-theme", initialTheme);
-    setIsDark(theme.matches);
-
-    // 监听系统主题变化
-    const handleChange = (e: MediaQueryListEvent) => {
-      const newTheme = e.matches ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", newTheme);
-      setIsDark(e.matches);
-    };
-    theme.addEventListener("change", handleChange);
-
-    return () => theme.removeEventListener("change", handleChange);
-  }, []);
+    // 每次 theme 改变时同步到 DOM
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   const toggleTheme = () => {
-    const newTheme = isDark ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", newTheme);
-    setIsDark(!isDark);
-    dispatch(setTheme(newTheme));
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
   };
 
   return (
     <label className="toggle cursor-pointer">
       <input
         type="checkbox"
-        checked={isDark}
+        checked={theme === "dark"}
         onChange={toggleTheme}
         className="hidden"
       />
