@@ -1,8 +1,11 @@
 import { Button, Form, Input } from "antd";
 import { login } from "@/api/user";
 import { useNavigate } from "react-router-dom";
-import Logo from "@/assets/EasyAgent-Icon.svg";
+import loadingAnimation from "@/LootieJson/Welcome.json";
 import { setUser } from "@/store/store";
+import { useStore } from "@/store/store";
+import { useEffect } from "react";
+import Lottie from "lottie-react";
 type FieldType = {
   username?: string;
   password?: string;
@@ -10,10 +13,10 @@ type FieldType = {
 
 const Login = () => {
   const navigate = useNavigate();
-
+  const showLoading = useStore((store) => store.showLoading);
+  const hideLoading = useStore((store) => store.hideLoading);
   const onFinish = async (values: FieldType) => {
     const { username, password } = values;
-
     if (username && password) {
       const payload = {
         email: username,
@@ -23,19 +26,21 @@ const Login = () => {
       if (result.data.success) {
         localStorage.setItem("token", result.data.data.access_token);
         setUser(result.data.data.user);
-        navigate("/");
+        showLoading();
+        setTimeout(() => {
+          navigate("/");
+        }, 1000);
       }
     }
   };
+  useEffect(() => {
+    hideLoading();
+  }, []);
 
   return (
     <div className="flex justify-center items-center h-screen">
       <div className="flex  rounded-md w-[50%] shadow-lg pr-4">
-        <img
-          src={Logo}
-          alt=""
-          className="w-[50%] h-full rounded-tl-md rounded-bl-md"
-        />
+        <Lottie animationData={loadingAnimation} loop={true} />
 
         <div className="px-[30px] bg-white/30 py-[50px] w-[50%]">
           <div className="text-[40px] font-bold text-center">
@@ -69,7 +74,7 @@ const Login = () => {
 
             <Form.Item label={null}>
               <Button type="primary" htmlType="submit">
-                Submit
+                登录
               </Button>
             </Form.Item>
           </Form>

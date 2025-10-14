@@ -12,14 +12,17 @@
   "dependencies": {
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "@tailwindcss/vite": "^4.1.13",
+    "animate.css": "^4.1.1",
     "axios": "^1.12.2",
     "daisyui": "^5.1.12",
     "gsap": "^3.13.0",
+    "lottie-react": "^2.4.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.9.1",
     "react-syntax-highlighter": "^15.6.6",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.1.13",
     "uuid": "^13.0.0",
     "zustand": "^5.0.8"

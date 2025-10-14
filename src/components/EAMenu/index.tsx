@@ -44,7 +44,7 @@ const EAMenu: React.FC<EAMenuProps> = ({
   const footer = () => {
     return (
       <div className="flex justify-end gap-[20px] mt-[20px]">
-        <EAButton text="取消" />
+        <EAButton text="取消" onClick={() => setIsOpen(false)} />
         <EAButton
           text="确认"
           onClick={() => handleRename(currentChatId ?? 0)}
@@ -59,7 +59,7 @@ const EAMenu: React.FC<EAMenuProps> = ({
       chatList.map((item) => ({
         key: item.id,
         label: (
-          <div className="flex justify-between items-center w-full">
+          <div className="flex justify-between items-center w-full group">
             <span className="truncate">{item.title}</span>
             <Dropdown
               menu={{
@@ -87,10 +87,8 @@ const EAMenu: React.FC<EAMenuProps> = ({
               trigger={["click"]}
             >
               <div
-                className="!bg-[transparent] !border-none !text-[var(--chat-text)] !shoadow-none"
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
+                className="opacity-0 group-hover:opacity-100 !bg-[transparent] !border-none !text-[var(--chat-text)] !shadow-none transition-opacity duration-200"
+                onClick={(e) => e.stopPropagation()}
               >
                 <EllipsisOutlined />
               </div>

@@ -18,6 +18,9 @@ interface StoreSchema {
   messages: ChatItem[] | null; // 聊天记录
   theme: "dark" | "light" | "system"; // 主题
   user: User | null; // 用户信息
+  loading: { visible: boolean; message: string }; // 全局加载
+  showLoading: () => void;
+  hideLoading: () => void;
 }
 export const useStore = create<StoreSchema>(() => ({
   messages: [],
@@ -25,6 +28,13 @@ export const useStore = create<StoreSchema>(() => ({
     ? "dark"
     : "light",
   user: null,
+  loading: { visible: false, message: "" }, // 全局加载
+  showLoading: (msg?: string) =>
+    useStore.setState({
+      loading: { visible: true, message: msg || "加载中，请稍候..." },
+    }),
+  hideLoading: () =>
+    useStore.setState({ loading: { visible: false, message: "" } }),
 }));
 // 设置用户信息
 export function setUser(user: User | null) {

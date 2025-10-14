@@ -41,7 +41,8 @@ const Home: React.FC = () => {
   const [pageLoading, setPageLoading] = useState(false);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
-
+  const hideLoading = useStore((store) => store.hideLoading);
+  const showLoading = useStore((store) => store.showLoading);
   // 将对话聊天滚动到最底部
   const scrollToBottom = () => {
     const container = messageContainerRef.current;
@@ -67,6 +68,7 @@ const Home: React.FC = () => {
   };
   useEffect(() => {
     getHisttoryList();
+    hideLoading();
     const container = messageContainerRef.current;
     if (!container) return;
 
@@ -160,42 +162,50 @@ const Home: React.FC = () => {
 
   return (
     <div className="flex h-screen">
-      <div className="flex flex-col justify-between pt-[20px] overflow-y-auto border-r-[10px] border-base-300 w-[260px] flex-shrink-0">
-        <EAMenu
-          className="max-h-[calc(100vh-328px)] overflow-y-auto !bg-[transparent]"
-          chatList={chatList}
-          handleChatClick={handleChatClick}
-          selectedKey={selectedMenuKey}
-          onSelectedKeyChange={setSelectedMenuKey}
-          getHisttoryList={getHisttoryList}
-        />
-        <div className="flex flex-col">
+      <div className="flex flex-col border-r-[10px] border-base-300 w-[260px] flex-shrink-0">
+        {/* 让上半部分（EAMenu）自动占满剩余空间 */}
+        <div className="flex-1 overflow-y-auto">
+          <EAMenu
+            className="!bg-transparent"
+            chatList={chatList}
+            handleChatClick={handleChatClick}
+            selectedKey={selectedMenuKey}
+            onSelectedKeyChange={setSelectedMenuKey}
+            getHisttoryList={getHisttoryList}
+          />
+        </div>
+
+        {/* 固定底部操作区 */}
+        <div className="flex flex-col gap-2 mt-2 border-t border-base-300 p-2">
           <EAButton
             text="退出登录"
             onClick={() => {
-              localStorage.removeItem("token");
-              navigate("/login");
+              showLoading();
+              setTimeout(() => {
+                localStorage.removeItem("token");
+                setMessages([]);
+                navigate("/login");
+              }, 1000);
             }}
-            className="mt-[auto]"
           />
           <EAButton
             text="创建新会话"
             onClick={() => {
               setMessages([]);
               setCurrentChatId(null);
-              setSelectedMenuKey(""); // 清空菜单选中
+              setSelectedMenuKey("");
             }}
-            className="mt-[auto]"
           />
           <EATheme />
         </div>
       </div>
+
       <Layout>
         <Spin spinning={pageLoading}>
-          <Content className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 gap-[20px] relative">
+          <Content className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative">
             <div
               ref={messageContainerRef}
-              className="overflow-y-auto w-[100%] px-[20%] flex flex-col-reverse"
+              className="overflow-y-auto w-[100%]  px-[21%] flex flex-col-reverse"
             >
               <div
                 className={`absolute top-[85%] right-[18%] z-10 transition-opacity duration-300 ${
@@ -244,7 +254,7 @@ const Home: React.FC = () => {
 
             <div
               ref={inputWrapperRef}
-              className={`flex justify-center items-center w-full translation-all duration-500 transform-gpu mt-[20px] ${
+              className={`flex justify-center items-center w-full translation-all duration-500 transform-gpu ${
                 message.length > 0 ? "translate-y-[0%]" : ""
               }`}
             >

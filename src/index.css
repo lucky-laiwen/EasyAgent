@@ -48,3 +48,7 @@
   --scroll-thumb: #888;
   --scroll-thumb-hover: #555;
 }
+body {
+  width: 100vw !important;
+  height: 100vh !important;
+}

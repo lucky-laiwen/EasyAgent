@@ -6,7 +6,7 @@ import {
   oneLight,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useStore } from "@/store/store";
-
+import remarkGfm from "remark-gfm";
 // 单独组件，处理每个代码块
 const CodeBlock: React.FC<{ language: string; value: string }> = ({
   language,
@@ -27,7 +27,7 @@ const CodeBlock: React.FC<{ language: string; value: string }> = ({
 
   return (
     <div className="relative group my-2">
-      <div className="absolute w-full h-[calc(100%-10px)] flex justify-between pt-[0px]">
+      <div className="absolute w-full flex justify-between pt-[0px]">
         <div className="sticky flex items-center justify-between top-0 w-full h-[40px] rounded-tl-lg rounded-tr-lg bg-[var(--markdown-head-bg)] px-4">
           <div className="text-[var(--Ai-content-text)]">{language}</div>
           <button
@@ -58,6 +58,7 @@ const EAMarkdown: React.FC<{
   return (
     <div>
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
           code({ inline, className, children }: any) {
             const match = /language-(\w+)/.exec(className || "");
@@ -71,6 +72,22 @@ const EAMarkdown: React.FC<{
               </code>
             );
           },
+          table: ({ children }) => (
+            <div className="overflow-x-auto border border-gray-200">
+              <table className="min-w-full border-collapse text-sm">
+                {children}
+              </table>
+            </div>
+          ),
+          th: (props) => (
+            <th
+              className="border border-gray-200 px-3 py-2 text-left font-medium"
+              {...props}
+            />
+          ),
+          td: (props) => (
+            <td className="border border-gray-200 px-3 py-2" {...props} />
+          ),
         }}
       >
         {content}
