@@ -1,0 +1,9 @@
+.ea-message {
+  :global {
+    .ant-message-notice-content {
+      margin: 0px !important;
+      background: var(--login-bg) !important;
+      color: var(--Ai-content-text) !important;
+    }
+  }
+}

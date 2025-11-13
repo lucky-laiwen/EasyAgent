@@ -24,6 +24,7 @@
   --chat-tag-border: #e5e7eb;
   --scroll-thumb: #cbd5e1;
   --scroll-thumb-hover: #94a3b8;
+  --login-bg: #fff;
 }
 
 /* 🌙 夜间模式（dark） */
@@ -47,6 +48,7 @@
   --chat-tag-border: #363636;
   --scroll-thumb: #888;
   --scroll-thumb-hover: #555;
+  --login-bg: rgb(29, 35, 42);
 }
 body {
   width: 100vw !important;

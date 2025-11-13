@@ -10,7 +10,7 @@ interface EALoadingProps {
 const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
   const [mounted, setMounted] = useState(visible);
   const [animatingOut, setAnimatingOut] = useState(false);
-
+  const theme = useStore((state) => state.theme);
   useEffect(() => {
     if (visible) {
       setMounted(true);
@@ -38,7 +38,11 @@ const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
       <Lottie
         animationData={loadingAnimation}
         loop={true}
-        style={{ width: "100%", height: "100%", background: "rgb(29, 35, 42)" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          background: theme === "dark" ? "rgb(29, 35, 42)" : "white",
+        }}
       />
     </div>
   );
@@ -46,8 +50,39 @@ const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
 
 const GlobalLoading = () => {
   const loading = useStore((state) => state.loading);
+  const theme = useStore((state) => state.theme);
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const storedTheme = localStorage.getItem("theme");
 
-  return <EALoading visible={loading.visible} />;
+    const activeTheme = storedTheme || theme;
+    if (activeTheme === "system") {
+      document.documentElement.setAttribute(
+        "data-theme",
+        mediaQuery.matches ? "dark" : "light"
+      );
+    } else {
+      document.documentElement.setAttribute("data-theme", activeTheme);
+    }
+    const listener = (e: MediaQueryListEvent) => {
+      const currentTheme = storedTheme || theme;
+      if (currentTheme === "system") {
+        document.documentElement.setAttribute(
+          "data-theme",
+          e.matches ? "dark" : "light"
+        );
+      }
+    };
+
+    mediaQuery.addEventListener("change", listener);
+    return () => mediaQuery.removeEventListener("change", listener);
+  }, [theme]);
+
+  return (
+    <>
+      <EALoading visible={loading.visible} />
+    </>
+  );
 };
 
 export default GlobalLoading;

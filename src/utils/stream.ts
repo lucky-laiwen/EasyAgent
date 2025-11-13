@@ -15,6 +15,8 @@ export function useStreamAIMessage() {
       updateMessage({
         id: aiMessageId,
         content: chunk.content,
+        tool_content: chunk.tool_content,
+        tool_name: chunk.tool_name,
         type: chunk.type,
         finished: false,
       });

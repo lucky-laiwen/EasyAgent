@@ -1,23 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Layout, Spin } from "antd";
-import {
-  getChatRecords,
-  getChatContent,
-  createChat,
-  generateChatTitle,
-} from "@/api/chat";
+import { Layout, Spin, message } from "antd";
+import { getChatRecords, getChatContent, createChat } from "@/api/chat";
 import EAButton from "@/components/EAButton";
 import EAInput from "@/components/EAInput";
 import { useNavigate } from "react-router-dom";
 import EAMenu from "@/components/EAMenu/index";
 import EAMarkdown from "@/components/EAMarkdown/EAMarkdown";
 import { addMessage, setMessages, useStore } from "@/store/store";
-import gsap from "gsap";
 import EATheme from "@/components/EAThema";
-import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 import { useStreamAIMessage } from "@/utils/stream";
+import { setUser } from "@/store/store";
+import { logout } from "@/api/user";
 const { Content } = Layout;
-gsap.registerPlugin(ScrollToPlugin);
 export interface ChatItem {
   id: number;
   sender: 0 | 1;
@@ -31,7 +25,7 @@ export interface ChatItem {
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { streamAIMessage } = useStreamAIMessage();
-  const message = useStore((state) => state.messages) ?? [];
+  const messages = useStore((state) => state.messages) ?? [];
   const [chatList, setChatList] = useState<ChatItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
@@ -40,23 +34,19 @@ const Home: React.FC = () => {
   const inputWrapperRef = useRef<HTMLDivElement>(null);
   const [pageLoading, setPageLoading] = useState(false);
   const messageContainerRef = useRef<HTMLDivElement>(null);
-  const [showScrollButton, setShowScrollButton] = useState(false);
   const hideLoading = useStore((store) => store.hideLoading);
   const showLoading = useStore((store) => store.showLoading);
+  const [messagesApi] = message.useMessage();
+  const divRef = useRef<HTMLDivElement>(null);
+  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   // 将对话聊天滚动到最底部
   const scrollToBottom = () => {
     const container = messageContainerRef.current;
     if (!container) return;
-    gsap
-      .to(container, {
-        scrollTop: container.scrollHeight,
-        duration: 1.5,
-        ease: "power2.inOut",
-        overwrite: "auto", // 自动覆盖当前滚动动画
-      })
-      .then(() => {
-        gsap.killTweensOf(container);
-      });
+    container.scrollTo({
+      top: container.scrollHeight + 50,
+      behavior: "smooth",
+    });
   };
 
   // 获取历史记录
@@ -67,25 +57,33 @@ const Home: React.FC = () => {
     }
   };
   useEffect(() => {
+    const timer = setTimeout(() => {
+      hideLoading();
+    }, 300);
     getHisttoryList();
-    hideLoading();
+
     const container = messageContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      const { scrollTop } = container;
-      const isNotAtBottom = scrollTop !== 0;
-      setShowScrollButton(isNotAtBottom);
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight < 60;
+      setIsUserAtBottom(atBottom);
     };
 
     container.addEventListener("scroll", handleScroll);
-    // 初始化判断
     handleScroll();
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
+      clearTimeout(timer);
     };
-  }, []);
+  }, [hideLoading]);
+
+  // 当 message 更新时自动滚动
+  useEffect(() => {
+    if (isUserAtBottom) scrollToBottom();
+  }, [messages]);
   if (!localStorage.getItem("token")) {
     navigate("/login");
     return null;
@@ -124,45 +122,48 @@ const Home: React.FC = () => {
       finished: true,
     });
 
+    setTimeout(scrollToBottom, 100);
+
     // 获取 chatId（如果没有就用时间戳）
     const chatId =
       currentChatId ??
       Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
     // 1. 创建聊天请求
-    const createChatPromise = createChat({
+    const result = await createChat({
       id: chatId,
       message: sendText,
     });
+    if (result.data.success) {
+      const chatId = result.data.data.chat_id;
+      setCurrentChatId(chatId);
+      setSelectedMenuKey(chatId.toString());
+      getHisttoryList();
 
-    createChatPromise
-      .then((result) => {
-        if (result.data.success) {
-          const chatId = result.data.data.chat_id;
-          setCurrentChatId(chatId);
-          setSelectedMenuKey(chatId.toString());
+      streamAIMessage(chatId, sendText);
+      setLoading(false);
+    }
+  };
 
-          // 立即启动流式消息，不等待标题更新
-          streamAIMessage(chatId, sendText).then(() =>
-            setTimeout(scrollToBottom, 200)
-          );
-
-          // 单独更新标题
-          if (message.length === 2) {
-            generateChatTitle({
-              id: chatId,
-              message: sendText,
-            }).then((res) => {
-              if (res.data.success) getHisttoryList();
-            });
-          }
-        }
-      })
-      .finally(() => setLoading(false));
+  // 注销账户
+  const handleLogout = async () => {
+    const res = await logout();
+    if (res.data.success) {
+      showLoading();
+      setTimeout(() => {
+        localStorage.removeItem("token");
+        setMessages([]);
+        setUser(null);
+        navigate("/login");
+      }, 1000);
+    } else {
+      messagesApi.error("logout failed");
+    }
   };
 
   return (
     <div className="flex h-screen">
-      <div className="flex flex-col border-r-[10px] border-base-300 w-[260px] flex-shrink-0">
+      {/* 左侧菜单栏 */}
+      <div className="flex flex-col border-r-[10px] border-base-300 w-[260px] flex-shrink-0 transition-width duration-300">
         {/* 让上半部分（EAMenu）自动占满剩余空间 */}
         <div className="flex-1 overflow-y-auto">
           <EAMenu
@@ -176,18 +177,7 @@ const Home: React.FC = () => {
         </div>
 
         {/* 固定底部操作区 */}
-        <div className="flex flex-col gap-2 mt-2 border-t border-base-300 p-2">
-          <EAButton
-            text="退出登录"
-            onClick={() => {
-              showLoading();
-              setTimeout(() => {
-                localStorage.removeItem("token");
-                setMessages([]);
-                navigate("/login");
-              }, 1000);
-            }}
-          />
+        <div className="flex flex-col gap-2 mt-2 border-t border-base-300 p-2 relative">
           <EAButton
             text="创建新会话"
             onClick={() => {
@@ -196,20 +186,36 @@ const Home: React.FC = () => {
               setSelectedMenuKey("");
             }}
           />
+          <EAButton text="删除账号" onClick={handleLogout} />
+          <EAButton
+            text="退出登录"
+            onClick={() => {
+              showLoading();
+              setTimeout(() => {
+                localStorage.removeItem("token");
+                setMessages([]);
+                setUser(null);
+                navigate("/login");
+              }, 1000);
+            }}
+          />
           <EATheme />
         </div>
       </div>
 
-      <Layout>
+      <Layout className="!w-[auto]">
         <Spin spinning={pageLoading}>
-          <Content className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative">
+          <Content
+            ref={divRef}
+            className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative"
+          >
             <div
               ref={messageContainerRef}
-              className="overflow-y-auto w-[100%]  px-[21%] flex flex-col-reverse"
+              className="overflow-y-auto w-[100%]  px-[21%] flex flex-col"
             >
               <div
                 className={`absolute top-[85%] right-[18%] z-10 transition-opacity duration-300 ${
-                  showScrollButton
+                  !isUserAtBottom
                     ? "opacity-100"
                     : "opacity-0 pointer-events-none"
                 }`}
@@ -222,9 +228,10 @@ const Home: React.FC = () => {
                 </button>
               </div>
 
-              {[...message].reverse().map((item) => {
+              {messages.map((item) => {
                 return (
                   <div key={item.id} className="w-full flex flex-col mb-4 ">
+                    {/* 思考内容 */}
                     {item.think_content && (
                       <div className="px-3 w-[100%] py-2 rounded-lg rounded-bl-none rounded-br-none mt-2 bg-[var(--Ai-think-bg)] text-[var(--Ai-think-text)] text-sm italic">
                         <EAMarkdown
@@ -233,6 +240,55 @@ const Home: React.FC = () => {
                         />
                       </div>
                     )}
+                    {/* 工具名称 */}
+                    {item.tool_name && (
+                      <div
+                        className="group relative flex items-center gap-3 p-4 my-2 w-[60%] rounded-2xl shadow-md 
+               bg-gradient-to-r from-[var(--Ai-content-bg)]/90 to-[var(--Ai-content-bg)]/60 
+               backdrop-blur-md border border-white/10 transition-all duration-300 
+               hover:scale-[1.02] hover:shadow-lg hover:border-primary/40 cursor-pointer"
+                      >
+                        {/* 左侧图标区 */}
+                        <div
+                          className="flex items-center justify-center w-10 h-10 rounded-xl 
+                    bg-primary/20 text-primary font-semibold text-lg"
+                        >
+                          ⚙️
+                        </div>
+
+                        {/* 内容区 */}
+                        <div className="flex flex-col text-[var(--Ai-content-text)]">
+                          <div className="text-[15px] font-semibold tracking-wide">
+                            {item.tool_name}
+                          </div>
+                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                            系统调用的工具结果
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {item.tool_content &&
+                      item.tool_content.map((tool) => {
+                        return (
+                          <div
+                            key={tool.href}
+                            className="p-2 mb-2 border rounded-lg bg-white/10"
+                          >
+                            <div className="font-semibold">{tool.title}</div>
+                            <div className="text-sm text-gray-300">
+                              {tool.body}
+                            </div>
+                            <a
+                              href={tool.href}
+                              className="text-blue-400 underline"
+                              target="_blank"
+                            >
+                              {tool.href}
+                            </a>
+                          </div>
+                        );
+                      })}
+                    {/* 主要内容 */}
                     {item.content && (
                       <div
                         className={`px-4 py-2   leading-8 ${
@@ -254,8 +310,8 @@ const Home: React.FC = () => {
 
             <div
               ref={inputWrapperRef}
-              className={`flex justify-center items-center w-full translation-all duration-500 transform-gpu ${
-                message.length > 0 ? "translate-y-[0%]" : ""
+              className={`flex justify-center items-center w-[99.1%] translation-all duration-500 transform-gpu ${
+                messages.length > 0 ? "translate-y-[0px]" : ""
               }`}
             >
               <EAInput

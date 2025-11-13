@@ -24,11 +24,6 @@ export function createChat(data: SendMessageSchemas) {
   return request.post("/chat/create_chat", data);
 }
 
-// 获取聊天标题
-export function generateChatTitle(data: SendMessageSchemas) {
-  return request.post(`/chat/get_chat_title`, data);
-}
-
 // 更新聊天标题
 export function updateChatTitle(data: SendMessageSchemas) {
   return request.post(`/chat/update_chat_title`, data);

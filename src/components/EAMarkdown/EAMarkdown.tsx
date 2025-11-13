@@ -27,8 +27,8 @@ const CodeBlock: React.FC<{ language: string; value: string }> = ({
 
   return (
     <div className="relative group my-2">
-      <div className="absolute w-full flex justify-between pt-[0px]">
-        <div className="sticky flex items-center justify-between top-0 w-full h-[40px] rounded-tl-lg rounded-tr-lg bg-[var(--markdown-head-bg)] px-4">
+      <div className="sticky top-0 w-full flex justify-between">
+        <div className="flex items-center justify-between w-full h-[40px] rounded-tl-lg rounded-tr-lg bg-[var(--markdown-head-bg)] px-4">
           <div className="text-[var(--Ai-content-text)]">{language}</div>
           <button
             onClick={handleCopy}
@@ -42,7 +42,7 @@ const CodeBlock: React.FC<{ language: string; value: string }> = ({
         style={theme === "light" ? oneLight : oneDark}
         language={language}
         PreTag="div"
-        className="rounded-lg !pt-[50px]"
+        className="rounded-lg !m-0"
       >
         {value}
       </SyntaxHighlighter>
@@ -73,7 +73,7 @@ const EAMarkdown: React.FC<{
             );
           },
           table: ({ children }) => (
-            <div className="overflow-x-auto border border-gray-200">
+            <div className="overflow-x-auto">
               <table className="min-w-full border-collapse text-sm">
                 {children}
               </table>
@@ -81,7 +81,7 @@ const EAMarkdown: React.FC<{
           ),
           th: (props) => (
             <th
-              className="border border-gray-200 px-3 py-2 text-left font-medium"
+              className="border border-gray-200 px-3 py-2 text-left font-medium bg-[var(--Ai-think-bg)]"
               {...props}
             />
           ),

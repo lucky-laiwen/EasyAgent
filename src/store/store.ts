@@ -1,9 +1,17 @@
 import { create } from "zustand";
+interface toolItem {
+  title: string;
+  href: string;
+  body: string;
+}
+
 interface ChatItem {
   id: number;
   sender: 0 | 1; // 0: 用户, 1: AI
   content: string;
   think_content?: string;
+  tool_content?: Array<toolItem>;
+  tool_name?: string;
   title?: string;
   type?: string;
   finished?: boolean;
@@ -18,23 +26,24 @@ interface StoreSchema {
   messages: ChatItem[] | null; // 聊天记录
   theme: "dark" | "light" | "system"; // 主题
   user: User | null; // 用户信息
-  loading: { visible: boolean; message: string }; // 全局加载
+  loading: { visible: boolean }; // 全局加载
   showLoading: () => void;
   hideLoading: () => void;
 }
 export const useStore = create<StoreSchema>(() => ({
   messages: [],
-  theme: window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light",
+  theme:
+    localStorage.getItem("theme") ||
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light",
   user: null,
-  loading: { visible: false, message: "" }, // 全局加载
-  showLoading: (msg?: string) =>
+  loading: { visible: false }, // 全局加载
+  showLoading: () =>
     useStore.setState({
-      loading: { visible: true, message: msg || "加载中，请稍候..." },
+      loading: { visible: true },
     }),
-  hideLoading: () =>
-    useStore.setState({ loading: { visible: false, message: "" } }),
+  hideLoading: () => useStore.setState({ loading: { visible: false } }),
 }));
 // 设置用户信息
 export function setUser(user: User | null) {
@@ -58,21 +67,35 @@ export function updateMessage({
   content,
   type,
   finished,
+  tool_content,
+  tool_name,
 }: {
   id: number;
   content?: string;
   type?: string;
   finished?: boolean;
+  tool_content?: Array<toolItem>;
+  tool_name?: string;
 }) {
   const message = useStore.getState().messages?.map((item) => {
     if (item.id === id) {
-      // 按需更新
+      // 内容更新
       if (content !== undefined) {
         if (type === "think") {
           item.think_content = (item.think_content || "") + content;
-        } else {
+        } else if (type === "text") {
           item.content = (item.content || "") + content;
         }
+      }
+
+      // 工具名更新（独立判断）
+      if (type === "tool_name") {
+        item.tool_name = tool_name;
+      }
+
+      // 工具内容更新
+      if (type === "tool_content" && tool_content) {
+        item.tool_content = JSON.parse(JSON.stringify(tool_content));
       }
 
       if (finished !== undefined) {

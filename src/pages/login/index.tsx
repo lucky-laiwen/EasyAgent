@@ -1,84 +1,56 @@
-import { Button, Form, Input } from "antd";
-import { login } from "@/api/user";
-import { useNavigate } from "react-router-dom";
 import loadingAnimation from "@/LootieJson/Welcome.json";
-import { setUser } from "@/store/store";
 import { useStore } from "@/store/store";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Lottie from "lottie-react";
-type FieldType = {
-  username?: string;
-  password?: string;
-};
-
+import LoginPage from "./login-components/login-page";
+import SignupPage from "./login-components/signup-page";
+import ForgetPwdPage from "./login-components/forgetPwd-page";
 const Login = () => {
-  const navigate = useNavigate();
-  const showLoading = useStore((store) => store.showLoading);
   const hideLoading = useStore((store) => store.hideLoading);
-  const onFinish = async (values: FieldType) => {
-    const { username, password } = values;
-    if (username && password) {
-      const payload = {
-        email: username,
-        password: password,
-      };
-      const result = await login(payload);
-      if (result.data.success) {
-        localStorage.setItem("token", result.data.data.access_token);
-        setUser(result.data.data.user);
-        showLoading();
-        setTimeout(() => {
-          navigate("/");
-        }, 1000);
-      }
-    }
-  };
+  const [isLogin, setIsLogin] = useState(true);
+  const [isForgetPwd, setIsForgetPwd] = useState(false);
   useEffect(() => {
     hideLoading();
-  }, []);
+  }, [hideLoading]);
 
   return (
-    <div className="flex justify-center items-center h-screen">
-      <div className="flex  rounded-md w-[50%] shadow-lg pr-4">
-        <Lottie animationData={loadingAnimation} loop={true} />
-
-        <div className="px-[30px] bg-white/30 py-[50px] w-[50%]">
-          <div className="text-[40px] font-bold text-center">
-            欢迎登录 EasyAgent
+    <div
+      className={`flex justify-center items-center h-screen`}
+      style={{ fontFamily: "'Playfair Display', sans-serif" }}
+    >
+      <div className="flex bg-[var(--Ai-think-bg)]/80 rounded-[30px] w-[75%] h-[90%] shadow-lg pr-4 p-4 over-flow-hidden">
+        {/* 登录动画区域 */}
+        <div className="w-[50%] h-[100%] flex flex-col px-[5%] justify-between py-[5%] bg-[var(--login-bg)] !rounded-[20px]">
+          <Lottie
+            animationData={loadingAnimation}
+            loop={true}
+            className="mt-[20%]"
+          />
+          <div>
+            <div className="text-[40px] mb-[20px]">
+              Get <br /> Everything <br /> You Want
+            </div>
+            <span>
+              You can accomplish anything when you stay focused and think smart.
+              <br />
+              Trust the process, follow the flow, and let intelligence lead the
+              way.
+            </span>
           </div>
-          <Form
-            name="basic"
-            initialValues={{ remember: true }}
-            onFinish={onFinish}
-            autoComplete="off"
-            className="!mt-[50px]"
-          >
-            <div>用户名：</div>
-            <Form.Item<FieldType>
-              name="username"
-              rules={[
-                { required: true, message: "Please input your username!" },
-              ]}
-            >
-              <Input autoComplete="off" className="!w-full h" />
-            </Form.Item>
-            <div>密码：</div>
-            <Form.Item<FieldType>
-              name="password"
-              rules={[
-                { required: true, message: "Please input your password!" },
-              ]}
-            >
-              <Input.Password autoComplete="new-password" />
-            </Form.Item>
-
-            <Form.Item label={null}>
-              <Button type="primary" htmlType="submit">
-                登录
-              </Button>
-            </Form.Item>
-          </Form>
         </div>
+
+        {isForgetPwd ? (
+          <ForgetPwdPage handleChange={setIsForgetPwd} />
+        ) : isLogin ? (
+          // 登录区域
+          <LoginPage
+            handleChange={setIsLogin}
+            handleForgotPassword={setIsForgetPwd}
+          />
+        ) : (
+          // 注册区域
+          <SignupPage handleChange={setIsLogin} />
+        )}
       </div>
     </div>
   );

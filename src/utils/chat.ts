@@ -33,7 +33,7 @@ export async function* sendMessage(
       if (line.startsWith("data:")) {
         const jsonStr = line.replace(/^data:\s*/, "");
         const dataObj = JSON.parse(jsonStr);
-        if (dataObj.content) {
+        if (dataObj) {
           yield dataObj; // 用 yield 替代 onChunk 回调
         }
       } else if (line.startsWith("event: done")) {
