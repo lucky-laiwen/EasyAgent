@@ -36,7 +36,7 @@ const LoginPage = (props: {
           navigate("/");
         }, 1000);
       } else {
-        EAMessage.error("login failed");
+        EAMessage.error(result.data.message);
         setIsLoading(false);
       }
     }

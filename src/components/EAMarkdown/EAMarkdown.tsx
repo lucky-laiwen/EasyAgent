@@ -12,7 +12,7 @@ const CodeBlock: React.FC<{ language: string; value: string }> = ({
   language,
   value,
 }) => {
-  const theme = useStore((state) => state.theme);
+  const actualTheme = useStore((state) => state.actualTheme);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -39,7 +39,7 @@ const CodeBlock: React.FC<{ language: string; value: string }> = ({
         </div>
       </div>
       <SyntaxHighlighter
-        style={theme === "light" ? oneLight : oneDark}
+        style={actualTheme === "light" ? oneLight : oneDark}
         language={language}
         PreTag="div"
         className="rounded-lg !m-0"

@@ -6,10 +6,11 @@ interface EAInputSchema {
   setInputValue: (value: string) => void;
   sendMessage: () => void;
   loading: boolean;
+  className?: string;
 }
 
 const EAInput = (props: EAInputSchema) => {
-  const { inputValue, setInputValue, sendMessage, loading } = props;
+  const { inputValue, setInputValue, sendMessage, loading, className } = props;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // 监听回车发送
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -21,10 +22,10 @@ const EAInput = (props: EAInputSchema) => {
   };
 
   return (
-    <div className={`${styles["container_chat_bot"]}`}>
+    <div className={`${styles["container_chat_bot"]} ${className}`}>
       <div className={styles["container-chat-options"]}>
         <div className={styles["chat"]}>
-          <div className={styles["chat-bot"]}>
+          <div className={`${styles["chat-bot"]}`}>
             <textarea
               ref={inputRef}
               id="chat_bot"

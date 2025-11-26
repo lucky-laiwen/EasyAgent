@@ -2,7 +2,6 @@
 @plugin "daisyui";
 
 /* ================== 颜色变量 ================== */
-
 /* 🌞 白天模式（light） */
 :root {
   --Ai-think-text: #6b7280;
@@ -50,7 +49,22 @@
   --scroll-thumb-hover: #555;
   --login-bg: rgb(29, 35, 42);
 }
+html,
 body {
-  width: 100vw !important;
-  height: 100vh !important;
+  width: 100%; /* ✅ 使用 100% 避免水平滚动条 */
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.ant-dropdown-menu-root {
+  background: var(--login-bg) !important;
+}
+
+.ant-dropdown-menu-item {
+  color: var(--chat-text) !important;
+}
+
+.ant-dropdown-menu-item-only-child:hover {
+  background: var(--Ai-think-bg) !important;
 }

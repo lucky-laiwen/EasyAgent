@@ -20,6 +20,7 @@ const request = axios.create({
 request.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
+    config.headers["Accept-Language"] = "zh";
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

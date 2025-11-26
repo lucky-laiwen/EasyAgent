@@ -1,11 +1,12 @@
 type Schemas = {
-  icon?: React.ReactNode;
+  icon?: React.ReactNode | string;
   loading?: boolean;
   className?: string;
   onClick?: () => void;
   style?: React.CSSProperties;
   text?: string;
   htmlType?: "button" | "submit" | "reset" | undefined;
+  tableIndex?: number;
 };
 
 const EAButton = (props: Schemas) => {
@@ -14,13 +15,15 @@ const EAButton = (props: Schemas) => {
     className,
     onClick,
     style,
+    tableIndex,
     text,
     icon,
     htmlType = "button",
   } = props; // ✅ 设置默认值
   return (
     <button
-      className={`btn ${
+      tabIndex={tableIndex}
+      className={`btn font-[500] ${
         loading ? "pl-[35px]" : ""
       } ${className} transition-all duration-300 relative`}
       style={style}
@@ -28,7 +31,7 @@ const EAButton = (props: Schemas) => {
       disabled={loading}
       type={htmlType} // ✅ 始终有值
     >
-      <div className="relative">
+      <div className="relative flex flex-shrink-0 gap-2 items-center">
         {icon}
         <span
           className={`${

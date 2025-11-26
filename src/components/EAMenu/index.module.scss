@@ -9,5 +9,9 @@
     .ant-menu-item-active {
       background-color: var(--Ai-think-bg) !important;
     }
+    .ant-menu-item-group-title {
+      color: var(--Ai-think-text) !important;
+    }
   }
+  border: none !important;
 }

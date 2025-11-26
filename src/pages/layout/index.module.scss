@@ -17,3 +17,21 @@
     transform: translateY(-4px);
   }
 }
+
+.message-container {
+  overflow: hidden;
+  position: relative;
+}
+
+.message-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.message-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.message-container::-webkit-scrollbar-track {
+  background: transparent;
+}

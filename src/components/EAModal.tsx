@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import "animate.css";
 
 type Schemas = {
   children?: React.ReactNode;
   className?: string;
-  style?: React.CSSProperties;
   onCancel?: () => void;
   open?: boolean;
   fotter?: React.ReactNode;
@@ -13,60 +13,70 @@ type Schemas = {
 const EAModal: React.FC<Schemas> = ({
   children,
   className = "",
-  style = {},
   onCancel,
   open = false,
   fotter,
   title,
 }) => {
+  const [mounted, setMounted] = useState(open);
+  const [animatingOut, setAnimatingOut] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setAnimatingOut(false);
+    } else if (mounted) {
+      setAnimatingOut(true);
+    }
+  }, [open, mounted]);
+
+  const handleAnimationEnd = () => {
+    if (animatingOut) setMounted(false);
+  };
+
+  if (!mounted) return null;
+
   return (
-    <>
-      {/* Modal开关，根据open属性控制，只读 */}
-      <input
-        type="checkbox"
-        id="my_modal_7"
-        checked={open}
-        className="modal-toggle"
-        readOnly
-      />
+    <div
+      className="fixed inset-0 z-[99] flex justify-center items-center"
+      style={{ margin: 0, padding: 0 }}
+    >
+      {/* 背景遮罩 */}
+      <div
+        className={`absolute inset-0 bg-black/40 animate__animated ${
+          animatingOut ? "animate__fadeOut" : "animate__fadeIn"
+        }`}
+        style={{ animationDuration: "0.4s" }}
+        onClick={onCancel}
+        onAnimationEnd={handleAnimationEnd}
+      ></div>
 
-      {/* Modal内容 */}
-      <div className="modal">
-        <div className={`modal-box ${className}`} style={style}>
-          <form
-            method="dialog"
-            className="flex justify-between items-center mb-4"
+      {/* Modal 内容 */}
+      <div
+        className={`relative w-[25%] max-w-full bg-base-300 rounded-lg shadow-lg animate__animated ${className} ${
+          animatingOut ? "animate__fadeOut" : "animate__fadeIn"
+        }`}
+        style={{ animationDuration: "0.4s" }}
+        onAnimationEnd={handleAnimationEnd}
+      >
+        {/* 头部 */}
+        <div className="flex justify-between items-center p-4 pb-0 ">
+          <div className="text-lg font-semibold">{title}</div>
+          <button
+            className="btn btn-sm btn-circle btn-ghost"
+            onClick={onCancel}
           >
-            <div className="text-lg font-semibold">{title}</div>
-            <button
-              className="btn btn-sm btn-circle btn-ghost"
-              onClick={onCancel}
-            >
-              ✕
-            </button>
-          </form>
-
-          {children}
-          {fotter || fotter === null ? (
-            fotter
-          ) : (
-            <div className="modal-action">
-              <form method="dialog">
-                {/* if there is a button in form, it will close the modal */}
-                <button className="btn">Close</button>
-              </form>
-            </div>
-          )}
+            ✕
+          </button>
         </div>
 
-        {/* 点击背景关闭 modal */}
-        <label
-          htmlFor="my_modal_7"
-          className="modal-backdrop"
-          onClick={onCancel}
-        ></label>
+        {/* 内容 */}
+        <div className="p-4 overflow-auto">{children}</div>
+
+        {/* 底部操作 */}
+        {fotter && <div className="pb-4 px-4 ">{fotter}</div>}
       </div>
-    </>
+    </div>
   );
 };
 

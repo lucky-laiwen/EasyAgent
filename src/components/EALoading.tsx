@@ -10,7 +10,7 @@ interface EALoadingProps {
 const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
   const [mounted, setMounted] = useState(visible);
   const [animatingOut, setAnimatingOut] = useState(false);
-  const theme = useStore((state) => state.theme);
+  const actualTheme = useStore((state) => state.actualTheme);
   useEffect(() => {
     if (visible) {
       setMounted(true);
@@ -30,7 +30,7 @@ const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
 
   return (
     <div
-      className={`fixed inset-0 flex justify-center items-center bg-opacity-50 animate__animated ${
+      className={`fixed inset-0 flex justify-center items-center bg-opacity-50 z-999 animate__animated ${
         animatingOut ? "animate__slideOutUp" : "animate__slideInDown"
       }`}
       onAnimationEnd={handleAnimationEnd}
@@ -41,7 +41,7 @@ const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
         style={{
           width: "100%",
           height: "100%",
-          background: theme === "dark" ? "rgb(29, 35, 42)" : "white",
+          background: actualTheme === "dark" ? "rgb(29, 35, 42)" : "white",
         }}
       />
     </div>
@@ -50,34 +50,12 @@ const EALoading: React.FC<EALoadingProps> = ({ visible }) => {
 
 const GlobalLoading = () => {
   const loading = useStore((state) => state.loading);
-  const theme = useStore((state) => state.theme);
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const storedTheme = localStorage.getItem("theme");
-
-    const activeTheme = storedTheme || theme;
-    if (activeTheme === "system") {
-      document.documentElement.setAttribute(
-        "data-theme",
-        mediaQuery.matches ? "dark" : "light"
-      );
-    } else {
-      document.documentElement.setAttribute("data-theme", activeTheme);
-    }
-    const listener = (e: MediaQueryListEvent) => {
-      const currentTheme = storedTheme || theme;
-      if (currentTheme === "system") {
-        document.documentElement.setAttribute(
-          "data-theme",
-          e.matches ? "dark" : "light"
-        );
-      }
-    };
-
-    mediaQuery.addEventListener("change", listener);
-    return () => mediaQuery.removeEventListener("change", listener);
-  }, [theme]);
-
+    document.documentElement.setAttribute(
+      "data-theme",
+      useStore.getState().actualTheme
+    );
+  }, []);
   return (
     <>
       <EALoading visible={loading.visible} />
