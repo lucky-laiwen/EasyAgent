@@ -148,6 +148,23 @@
     filter: drop-shadow(0 0 5px var(--chat-button-icon-hover));
     transform: scale(1.2) rotate(45deg) translateX(-2px) translateY(1px);
   }
+
+  &:hover {
+    background-color: #1d4ed8;
+  }
+
+  /* ===== 禁用态 ===== */
+  &:disabled {
+    background-color: #6b7280;
+    color: #e5e7eb;
+    cursor: not-allowed;
+  }
+
+  /* 🔴 禁用 + hover 变红 */
+  &:disabled:hover {
+    background-color: #dc2626; /* red-600 */
+    color: white;
+  }
 }
 
 .container_chat_bot .tags {

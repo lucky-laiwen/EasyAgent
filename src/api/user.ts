@@ -27,3 +27,23 @@ export const forgetPassword = (params: LoginSchemas) => {
 export const logout = () => {
   return request.delete("/user/logout");
 };
+
+// 上传文件
+export const uploadFile = (params: FormData) => {
+  return request.post("/user/upload_file", params, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
+type UpdateUserSchemas = {
+  name: string;
+  email: string;
+  avatar: string;
+};
+
+// 更新用户信息
+export const updateUserInfo = (params: UpdateUserSchemas) => {
+  return request.put("/user/update_user", params);
+};

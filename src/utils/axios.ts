@@ -39,6 +39,8 @@ request.interceptors.response.use(
   (error) => {
     if (error.status === 401) {
       window.location.href = "/login";
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
     }
     message.error(error.message);
     return Promise.reject(error);

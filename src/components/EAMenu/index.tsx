@@ -15,6 +15,7 @@ interface EAMenuProps {
   selectedKey?: string;
   onSelectedKeyChange?: (key: string) => void;
   getHisttoryList?: () => void;
+  deleteCurChat?: () => void;
 }
 const EAMenu: React.FC<EAMenuProps> = ({
   chatList,
@@ -23,6 +24,7 @@ const EAMenu: React.FC<EAMenuProps> = ({
   selectedKey,
   onSelectedKeyChange,
   getHisttoryList,
+  deleteCurChat,
 }) => {
   const [menuItems, setMenuItems] = useState<
     {
@@ -53,6 +55,9 @@ const EAMenu: React.FC<EAMenuProps> = ({
     if (res.data.success) {
       if (selectedKey === id.toString()) {
         setMessages([]);
+      }
+      if (id === Number(selectedKey)) {
+        deleteCurChat?.();
       }
       EAMessage.success("删除成功");
       setIsLoading(false);

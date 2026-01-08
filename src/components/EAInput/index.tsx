@@ -94,6 +94,7 @@ const EAInput = (props: EAInputSchema) => {
                 loading ? styles["focus-svg"] : ""
               }`}
               onClick={sendMessage} // ✅ 点击发送消息
+              disabled={loading}
             >
               <i>
                 <svg viewBox="0 0 512 512">

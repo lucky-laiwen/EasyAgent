@@ -44,6 +44,30 @@ interface User {
   email: string;
   name: string;
   created_at: string;
+  avatar: string;
+}
+
+// 聊天信息
+interface UserChatSchema {
+  id: number;
+  sender_id: number;
+  receiver_id: number;
+  content: string;
+  status: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// 好友信息
+export interface UserFriendSchema {
+  id: number;
+  status: number;
+  created_at: string;
+  friend: {
+    id: number;
+    name: string;
+    avatar: string;
+  };
 }
 
 // 全局状态结构
@@ -55,11 +79,17 @@ interface StoreSchema {
   loading: { visible: boolean };
   showLoading: () => void;
   hideLoading: () => void;
+  userChat: UserChatSchema[] | [];
+  userFriend: UserFriendSchema[] | [];
+  chatOpen: boolean;
 }
 
 // Zustand store
 export const useStore = create<StoreSchema>(() => ({
   messages: [],
+  userFriend: [],
+  userChat: [],
+  chatOpen: false,
   theme:
     (localStorage.getItem("theme") as "dark" | "light" | "system") ?? "system",
 
@@ -113,32 +143,34 @@ export function updateMessage({
   finished,
   tool_content,
   tool_name,
+  think_content,
 }: {
   id: number;
   content?: string;
   type?: string;
   finished?: boolean;
-  tool_content?: Array<WebSearchItem> | string;
+  tool_content?: Array<WebSearchItem> | string | Array<WeatherSearchItem>;
   tool_name?: string;
+  think_content?: string;
 }) {
   const message = useStore.getState().messages?.map((item) => {
     if (item.id === id) {
       // 内容更新
       if (content !== undefined) {
-        if (type === "think") {
-          item.think_content = (item.think_content || "") + content;
-        } else if (type === "text") {
+        if (think_content) {
+          item.think_content = (item.think_content || "") + think_content;
+        }
+        if (content) {
           item.content = (item.content || "") + content;
         }
       }
 
-      // 工具名更新
-      if (type === "tool_name") {
+      if (tool_name) {
         item.tool_name = tool_name;
       }
 
       // 工具内容更新 ✅ 支持数组或字符串
-      if (type === "tool_content" && tool_content !== undefined) {
+      if (tool_content) {
         if (typeof tool_content === "string") {
           // 是字符串就直接保存
           item.tool_content = tool_content;
@@ -164,4 +196,21 @@ export function updateMessage({
 // 设置整个消息列表
 export function setMessages(messages: ChatItem[] | null) {
   useStore.setState({ messages });
+}
+
+// 更新用户聊天
+export function updateUserChat(chat: UserChatSchema[]) {
+  useStore.setState({ userChat: chat });
+}
+
+// 开关聊天窗口
+export function toggleChat(isOpen: boolean) {
+  useStore.setState({ chatOpen: isOpen });
+}
+
+// 更新用户好友
+export function updateUserFriend(friend: UserFriendSchema[]) {
+  useStore.setState({
+    userFriend: friend,
+  });
 }

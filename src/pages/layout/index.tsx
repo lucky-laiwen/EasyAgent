@@ -1,22 +1,36 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Layout, Spin, message, Avatar } from "antd";
+import { Layout, Spin, message, Avatar, Upload } from "antd";
 import { getChatRecords, getChatContent, createChat } from "@/api/chat";
+import { type UploadRequestOption } from "rc-upload/lib/interface";
 import EAButton from "@/components/EAButton";
 import EAInput from "@/components/EAInput";
 import { useNavigate } from "react-router-dom";
 import EAMenu from "@/components/EAMenu/index";
 import EAMarkdown from "@/components/EAMarkdown/EAMarkdown";
-import { addMessage, setMessages, useStore } from "@/store/store";
+import {
+  addMessage,
+  setMessages,
+  useStore,
+  setUser,
+  updateUserChat,
+  toggleChat,
+  updateUserFriend,
+  type ChatItem as ChatItemStore,
+} from "@/store/store";
 import EATheme from "@/components/EAThema";
 import { useStreamAIMessage } from "@/utils/stream";
-import { setUser, type ChatItem as ChatItemStore } from "@/store/store";
-import { logout } from "@/api/user";
+import { logout, uploadFile, updateUserInfo } from "@/api/user";
 import MenuFoldDark from "@/assets/menu-fold-dark.svg";
 import MenuFoldLight from "@/assets/menu-fold-light.svg";
 import EADrawer from "@/components/EADrawer";
 import EAModal from "@/components/EAModal";
 import NewChatLight from "@/assets/new-chat-light.svg";
 import NewChatDark from "@/assets/new-chat-dark.svg";
+import Logo from "@/assets/EasyAgent-Logo.svg";
+import AiChatDark from "@/assets/ai-chat-dark.svg";
+import AiChatLight from "@/assets/ai-chat-light.svg";
+import { getFriendList } from "@/api/userFriend";
+import EALoader from "@/components/EALoader";
 // import EADrawer from "@/components/EADrawer";
 const { Content } = Layout;
 export interface ChatItem {
@@ -32,6 +46,7 @@ export interface ChatItem {
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { streamAIMessage } = useStreamAIMessage();
+  const userChat = useStore((state) => state.userChat);
   const messages = useStore((state) => state.messages) ?? [];
   const actualTheme = useStore((state) => state.actualTheme);
   const userInfo = useStore((state) => state.user);
@@ -92,9 +107,21 @@ const Home: React.FC = () => {
     };
   }, [hideLoading]);
 
+  const getFriendListApi = async () => {
+    const res = await getFriendList();
+    updateUserFriend(res.data.data);
+  };
+
+  useEffect(() => {
+    getFriendListApi();
+  }, []);
+
   // 当 message 更新时自动滚动
   useEffect(() => {
     if (isUserAtBottom) scrollToBottom();
+    if (messages[messages.length - 1]) {
+      setLoading(!messages[messages.length - 1].finished || false);
+    }
   }, [messages]);
   if (!localStorage.getItem("token")) {
     navigate("/login");
@@ -104,6 +131,7 @@ const Home: React.FC = () => {
   // 切换指定内容
   const handleChatClick = async (id: number) => {
     setPageLoading(true);
+    setCurrentMessage(undefined);
     const res = await getChatContent(id);
     if (res.data.success) {
       const messagesWithType = (res.data.data as ChatItem[]).map((item) => ({
@@ -134,25 +162,26 @@ const Home: React.FC = () => {
       finished: true,
     });
 
-    setTimeout(scrollToBottom, 100);
-
     // 获取 chatId（如果没有就用时间戳）
-    const chatId =
-      currentChatId ??
-      Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+    const chatId = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+    setTimeout(scrollToBottom, 30);
     // 1. 创建聊天请求
-    const result = await createChat({
-      id: chatId,
-      message: sendText,
-    });
-    if (result.data.success) {
-      const chatId = result.data.data.chat_id;
-      setCurrentChatId(chatId);
-      setSelectedMenuKey(chatId.toString());
-      getHisttoryList();
+    if (!currentChatId) {
+      const result = await createChat({
+        id: chatId,
+        message: sendText,
+      });
+      if (result.data.success) {
+        const chatId = result.data.data.id;
+        setCurrentChatId(chatId);
+        setSelectedMenuKey(chatId.toString());
+        getHisttoryList();
 
-      streamAIMessage(chatId, sendText);
-      setLoading(false);
+        await streamAIMessage(chatId, sendText);
+      }
+    } else {
+      getHisttoryList();
+      await streamAIMessage(currentChatId, sendText);
     }
   };
 
@@ -165,6 +194,7 @@ const Home: React.FC = () => {
         localStorage.removeItem("token");
         setMessages([]);
         setUser(null);
+        setCurrentChatId(null);
         navigate("/login");
       }, 1000);
     } else {
@@ -176,6 +206,28 @@ const Home: React.FC = () => {
   const handleClose = () => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
+    }
+  };
+
+  const handleUploadChange = async (option: UploadRequestOption<File>) => {
+    try {
+      const { file } = option;
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await uploadFile(formData);
+
+      if (userInfo?.id) {
+        setUser({ ...userInfo, avatar: res.data.data.url });
+      }
+      const result = await updateUserInfo({
+        name: userInfo?.name as string,
+        avatar: res.data.data.url,
+        email: userInfo?.email as string,
+      });
+      console.log(result);
+    } catch (err) {
+      console.log(err);
     }
   };
 
@@ -191,19 +243,9 @@ const Home: React.FC = () => {
       >
         <div className="flex flex-col gap-2 border-b-3 border-base-300 p-2 relative">
           <div className="flex flex-col justify-center gap-2">
-            <div
-              onClick={() => {
-                setIsModalOpen(true);
-              }}
-              className="flex items-center gap-2 my-2 p-2 rounded-lg transition-all duration-300 hover:bg-[var(--Ai-think-bg)] cursor-pointer"
-            >
-              <Avatar
-                size={36}
-                src={
-                  "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80"
-                }
-              />
-              <div>{userInfo?.name}</div>
+            <div className="flex items-center gap-4 my-2 p-2 rounded-lg transition-all duration-300">
+              <img src={Logo} className="w-[36px] h-[36px]" />
+              <div>Easy-Agent</div>
             </div>
             <EAButton
               text="创建新会话"
@@ -216,7 +258,7 @@ const Home: React.FC = () => {
               }}
               icon={
                 <img
-                  src={actualTheme === "dark" ? NewChatDark : NewChatLight}
+                  src={actualTheme === "dark" ? AiChatDark : AiChatLight}
                   alt=""
                   className="w-4 h-4 text-white"
                 />
@@ -224,6 +266,22 @@ const Home: React.FC = () => {
               className="flex justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
             />
             <EATheme />
+            <EAButton
+              text="好友列表"
+              onClick={() => {
+                toggleChat(true);
+                handleClose();
+                setCurrentMessage(undefined);
+              }}
+              icon={
+                <img
+                  src={actualTheme === "dark" ? NewChatDark : NewChatLight}
+                  alt=""
+                  className="w-4 h-4 text-white"
+                />
+              }
+              className="flex justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
+            />
           </div>
         </div>
         {/* 让上半部分（EAMenu）自动占满剩余空间 */}
@@ -235,10 +293,20 @@ const Home: React.FC = () => {
             selectedKey={selectedMenuKey}
             onSelectedKeyChange={setSelectedMenuKey}
             getHisttoryList={getHisttoryList}
+            deleteCurChat={() => setCurrentChatId(null)}
           />
         </div>
 
         {/* 固定底部操作区 */}
+        <div
+          onClick={() => {
+            setIsModalOpen(true);
+          }}
+          className="flex items-center gap-2 p-4 transition-all duration-300 hover:bg-[var(--Ai-think-bg)] border-t-1 border-white/10 cursor-pointer"
+        >
+          <Avatar size={36} src={userInfo?.avatar} />
+          <div className="text-[14px]">{userInfo?.name}</div>
+        </div>
       </div>
 
       <Layout className={`w-[auto]`}>
@@ -260,7 +328,7 @@ const Home: React.FC = () => {
                 onClick={() => setSlideHide(!slideHide)}
               />
 
-              {messages.map((item) => {
+              {messages.map((item, index) => {
                 return (
                   <div
                     key={item.id}
@@ -273,7 +341,7 @@ const Home: React.FC = () => {
                       <div className="px-3  w-[100%] py-2 rounded-lg rounded-bl-none rounded-br-none mt-2 bg-[var(--Ai-think-bg)] text-[var(--Ai-think-text)]">
                         <EAMarkdown
                           content={item.think_content}
-                          showCursor={!item.finished && item.sender === 1}
+                          isFinished={item.finished}
                         />
                       </div>
                     )}
@@ -285,6 +353,7 @@ const Home: React.FC = () => {
                                   backdrop-blur-md border border-white/10 transition-all duration-300 
                                   hover:scale-[1.02] hover:shadow-lg hover:border-primary/40 cursor-pointer"
                         onClick={() => {
+                          toggleChat(false);
                           setCurrentMessage(item);
                         }}
                       >
@@ -331,13 +400,16 @@ const Home: React.FC = () => {
                       >
                         <EAMarkdown
                           content={item.content}
-                          showCursor={!item.finished && item.sender === 1}
+                          isFinished={item.finished}
                         />
                       </div>
                     )}
                   </div>
                 );
               })}
+              <div className="w-[60%] max-w-[670px] flex justify-start">
+                {loading && <EALoader text="Generating" />}
+              </div>
             </div>
 
             <div
@@ -347,7 +419,7 @@ const Home: React.FC = () => {
               }`}
             >
               <button
-                className={`fixed cursor-pointer top-[-30%] left-[65%] bg-base-300 text-[20px] text-white transition-opacity duration-300 rounded-full flex items-center justify-center rounded-full w-10 h-10 ${
+                className={`fixed cursor-pointer top-[-30%] left-[65%] bg-base-300 text-[20px] text-[var(--Ai-content-text)] transition-opacity duration-300 rounded-full flex items-center justify-center rounded-full w-10 h-10 ${
                   !isUserAtBottom && messages.length > 0
                     ? "opacity-100"
                     : "opacity-0 pointer-events-none"
@@ -371,7 +443,10 @@ const Home: React.FC = () => {
       {/* 右侧菜单栏 */}
       <EADrawer
         message={currentMessage}
-        handleClose={() => setCurrentMessage(undefined)}
+        handleClose={() => {
+          setCurrentMessage(undefined);
+          toggleChat(false);
+        }}
       />
 
       <EAModal
@@ -383,15 +458,28 @@ const Home: React.FC = () => {
         {/* 个人信息部分 */}
         <div className="flex justify-between">
           <div className="flex items-center gap-4 mb-2">
-            <Avatar
-              size={46}
-              src={
-                "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80"
-              }
-            />
-            <div>
-              <div className="text-lg font-semibold">{userInfo?.name}</div>
-              <div className="text-sm text-gray-500">{userInfo?.email}</div>
+            <Upload
+              accept=".png,.jpg"
+              customRequest={handleUploadChange}
+              className="cursor-pointer"
+              showUploadList={false}
+            >
+              <Avatar size={56} src={userInfo?.avatar} />
+            </Upload>
+
+            <div className="flex flex-col gap-[10px]">
+              <input
+                type="text"
+                value={userInfo?.name}
+                placeholder="Type here"
+                className="input input-ghost w-[95%] !py-[10px] !px-0 text-lg h-5 hover:outline-[1px] focus:outline-[1px] transition-all duration-300"
+              />
+              <input
+                type="text"
+                value={userInfo?.email}
+                placeholder="Type here"
+                className="input input-ghost w-[95%] !py-[10px] !px-0 text-sm text-gray-500 outline-[var(--color-base-content)] h-5 hover:outline-[1px] focus:outline-none transition-all duration-300"
+              />
             </div>
           </div>
           <div className="flex flex-col gap-2">
@@ -448,6 +536,10 @@ const Home: React.FC = () => {
                 showLoading();
                 setTimeout(() => {
                   localStorage.removeItem("token");
+                  updateUserChat([]);
+                  updateUserFriend([]);
+                  toggleChat(false);
+                  setCurrentChatId(null);
                   setMessages([]);
                   setUser(null);
                   navigate("/login");

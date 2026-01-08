@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import {
@@ -51,10 +51,22 @@ const CodeBlock: React.FC<{ language: string; value: string }> = ({
 };
 
 const EAMarkdown: React.FC<{
-  content?: string;
-  showCursor?: boolean;
+  content: string;
   className?: string;
-}> = ({ content }) => {
+  isFinished?: boolean;
+}> = ({ content, isFinished }) => {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (index < content.length && !isFinished) {
+      const timer = setTimeout(() => {
+        setIndex((pre) => pre + 5);
+      }, 20);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [index, content.length]);
   return (
     <div>
       <ReactMarkdown
@@ -88,9 +100,39 @@ const EAMarkdown: React.FC<{
           td: (props) => (
             <td className="border border-gray-200 px-3 py-2" {...props} />
           ),
+          h1: ({ children }) => (
+            <h1 className="text-2xl font-bold mt-6 mb-4 text-[var(--Ai-content-text)]">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-xl font-semibold mt-5 mb-3 text-[var(--Ai-content-text)]">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-lg font-semibold mt-4 mb-2 text-[var(--Ai-content-text)]">
+              {children}
+            </h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="text-base font-medium mt-3 mb-2 text-[var(--Ai-content-text)]">
+              {children}
+            </h4>
+          ),
+          h5: ({ children }) => (
+            <h5 className="text-sm font-medium mt-2 mb-1 text-[var(--Ai-content-text)]">
+              {children}
+            </h5>
+          ),
+          h6: ({ children }) => (
+            <h6 className="text-xs font-medium mt-2 mb-1 opacity-70 text-[var(--Ai-content-text)]">
+              {children}
+            </h6>
+          ),
         }}
       >
-        {content}
+        {isFinished ? content : content.slice(0, index)}
       </ReactMarkdown>
     </div>
   );
