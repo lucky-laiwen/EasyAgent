@@ -10,14 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    "@ant-design/icons": "^6.1.0",
     "@tailwindcss/vite": "^4.1.13",
     "animate.css": "^4.1.1",
+    "antd": "^6.1.4",
     "axios": "^1.12.2",
     "daisyui": "^5.1.12",
     "dayjs": "^1.11.19",
     "gsap": "^3.13.0",
     "lottie-react": "^2.4.1",
+    "rc-upload": "^4.11.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",

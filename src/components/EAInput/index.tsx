@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import styles from "./EAInput.module.scss";
 
 interface EAInputSchema {
@@ -12,6 +12,16 @@ interface EAInputSchema {
 const EAInput = (props: EAInputSchema) => {
   const { inputValue, setInputValue, sendMessage, loading, className } = props;
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height = `${Math.min(
+        inputRef.current.scrollHeight,
+        200
+      )}px`;
+    }
+  }, [inputValue]);
   // 监听回车发送
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -34,6 +44,9 @@ const EAInput = (props: EAInputSchema) => {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              style={{
+                resize: "none",
+              }}
             />
           </div>
 

@@ -1,10 +1,29 @@
 import { create } from "zustand";
 
-// 工具项
+// 文本搜索项
 export interface WebSearchItem {
   title: string;
   href: string;
   body: string;
+}
+// 图片搜索项
+export interface WebSearchImagesSchema {
+  height: number;
+  image: string;
+  source: string;
+  thumbnail: string;
+  title: string;
+  url: string;
+  width: number;
+}
+// 新闻搜索项
+export interface WebSearchNewsSchema {
+  body: string;
+  date: string;
+  image: string;
+  source: string;
+  title: string;
+  url: string;
 }
 
 export interface WeatherSearchItem {
@@ -21,17 +40,20 @@ export interface WeatherSearchItem {
   type: string;
   notice: string;
 }
+
+export interface ToolContentSchema {
+  text: Array<WebSearchItem>;
+  imgs: Array<WebSearchImagesSchema>;
+  news: Array<WebSearchNewsSchema>;
+}
+
 // 聊天消息结构
 export interface ChatItem {
   id: number;
   sender: 0 | 1; // 0: 用户, 1: AI
   content: string;
   think_content?: string;
-  tool_content?:
-    | Array<WebSearchItem>
-    | Array<WeatherSearchItem>
-    | string
-    | null; // ✅ 支持字符串或数组
+  tool_content?: ToolContentSchema | string | null | Array<WeatherSearchItem>; // ✅ 支持字符串或数组
   tool_name?: string;
   title?: string;
   type?: string;
@@ -72,6 +94,7 @@ export interface UserFriendSchema {
 
 // 全局状态结构
 interface StoreSchema {
+  socket: WebSocket | null;
   messages: ChatItem[] | null;
   theme: "dark" | "light" | "system";
   actualTheme: "light" | "dark";
@@ -82,14 +105,19 @@ interface StoreSchema {
   userChat: UserChatSchema[] | [];
   userFriend: UserFriendSchema[] | [];
   chatOpen: boolean;
+  unReadMsg: UserChatSchema[] | [];
+  allChatMsg: UserChatSchema[] | [];
 }
 
 // Zustand store
 export const useStore = create<StoreSchema>(() => ({
+  socket: null,
   messages: [],
   userFriend: [],
   userChat: [],
   chatOpen: false,
+  unReadMsg: [],
+  allChatMsg: [],
   theme:
     (localStorage.getItem("theme") as "dark" | "light" | "system") ?? "system",
 
@@ -139,7 +167,6 @@ export function setActualTheme(theme: "dark" | "light") {
 export function updateMessage({
   id,
   content,
-  type,
   finished,
   tool_content,
   tool_name,
@@ -147,9 +174,8 @@ export function updateMessage({
 }: {
   id: number;
   content?: string;
-  type?: string;
   finished?: boolean;
-  tool_content?: Array<WebSearchItem> | string | Array<WeatherSearchItem>;
+  tool_content?: ToolContentSchema | string | null;
   tool_name?: string;
   think_content?: string;
 }) {
@@ -174,11 +200,10 @@ export function updateMessage({
         if (typeof tool_content === "string") {
           // 是字符串就直接保存
           item.tool_content = tool_content;
-        } else if (Array.isArray(tool_content)) {
-          // 是数组则深拷贝保存
-          item.tool_content = JSON.parse(JSON.stringify(tool_content));
         } else {
-          item.tool_content = null;
+          // 是数组则深拷贝保存
+          // item.tool_content = JSON.parse(JSON.stringify(tool_content));
+          item.tool_content = structuredClone(tool_content);
         }
       }
 
@@ -213,4 +238,22 @@ export function updateUserFriend(friend: UserFriendSchema[]) {
   useStore.setState({
     userFriend: friend,
   });
+}
+
+// 更新未读消息
+export function updateUnReadMsg(unReadMsg: UserChatSchema[]) {
+  useStore.setState({
+    unReadMsg: unReadMsg,
+  });
+}
+
+// 更新所有消息
+export function updateAllChatMsg(allChatMsg: UserChatSchema[]) {
+  useStore.setState({
+    allChatMsg: allChatMsg,
+  });
+}
+
+export function updatedSocket(socket: WebSocket | null) {
+  useStore.setState({ socket });
 }

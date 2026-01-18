@@ -1,8 +1,7 @@
 // axios.ts
 import axios from "axios";
 import type { AxiosResponse, AxiosRequestConfig } from "axios";
-import { message } from "antd";
-
+import EAMessage from "@/components/EAMessage";
 // 通用 API 响应结构
 export interface ApiResponse<T> {
   success: boolean;
@@ -42,7 +41,7 @@ request.interceptors.response.use(
       localStorage.removeItem("token");
       localStorage.removeItem("user");
     }
-    message.error(error.message);
+    EAMessage.error(error.message);
     return Promise.reject(error);
   }
 );

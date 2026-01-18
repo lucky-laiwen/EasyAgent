@@ -36,8 +36,8 @@ export async function* sendMessage(
         if (dataObj) {
           yield dataObj; // 用 yield 替代 onChunk 回调
         }
-      } else if (line.startsWith("event: done")) {
-        return; // 提前结束 generator
+      } else {
+        return undefined; // 提前结束 generator
       }
     }
   }

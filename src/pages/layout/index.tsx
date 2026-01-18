@@ -16,7 +16,15 @@ import {
   toggleChat,
   updateUserFriend,
   type ChatItem as ChatItemStore,
+  updateUnReadMsg,
+  updateAllChatMsg,
+  updatedSocket,
 } from "@/store/store";
+import {
+  getUnreadMessageList,
+  getAllMessageList,
+  createChatSocket,
+} from "@/api/userChat";
 import EATheme from "@/components/EAThema";
 import { useStreamAIMessage } from "@/utils/stream";
 import { logout, uploadFile, updateUserInfo } from "@/api/user";
@@ -31,7 +39,8 @@ import AiChatDark from "@/assets/ai-chat-dark.svg";
 import AiChatLight from "@/assets/ai-chat-light.svg";
 import { getFriendList } from "@/api/userFriend";
 import EALoader from "@/components/EALoader";
-// import EADrawer from "@/components/EADrawer";
+import EAMessage from "@/components/EAMessage";
+import EAActionBar from "@/components/EAActionBar";
 const { Content } = Layout;
 export interface ChatItem {
   id: number;
@@ -46,8 +55,8 @@ export interface ChatItem {
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { streamAIMessage } = useStreamAIMessage();
-  const userChat = useStore((state) => state.userChat);
   const messages = useStore((state) => state.messages) ?? [];
+  const unreadMsg = useStore((state) => state.unReadMsg);
   const actualTheme = useStore((state) => state.actualTheme);
   const userInfo = useStore((state) => state.user);
   const [chatList, setChatList] = useState<ChatItem[]>([]);
@@ -66,13 +75,17 @@ const Home: React.FC = () => {
   const [slideHide, setSlideHide] = useState(true);
   const [currentMessage, setCurrentMessage] = useState<ChatItemStore>();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [userName, setUserName] = useState<string | undefined>(userInfo?.name);
+  const [userEmail, setUserEmail] = useState<string | undefined>(
+    userInfo?.email
+  );
   // 将对话聊天滚动到最底部
   const scrollToBottom = () => {
     const container = messageContainerRef.current;
     if (!container) return;
     container.scrollTo({
       top: container.scrollHeight + 50,
-      behavior: "smooth",
+      behavior: "auto",
     });
   };
 
@@ -89,6 +102,7 @@ const Home: React.FC = () => {
     }, 300);
     getHisttoryList();
 
+    updatedSocket(createChatSocket(userInfo?.id as number));
     const container = messageContainerRef.current;
     if (!container) return;
 
@@ -110,6 +124,14 @@ const Home: React.FC = () => {
   const getFriendListApi = async () => {
     const res = await getFriendList();
     updateUserFriend(res.data.data);
+    const result = await getUnreadMessageList();
+    if (result.data.success) {
+      updateUnReadMsg(result.data.data);
+    }
+    const response = await getAllMessageList();
+    if (response.data.success) {
+      updateAllChatMsg(response.data.data);
+    }
   };
 
   useEffect(() => {
@@ -231,6 +253,36 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleUserInfo = async () => {
+    const re = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+    if (userInfo?.name === userName && userInfo?.email === userEmail) {
+      return;
+    }
+    if (!userName) {
+      setUserName(userInfo?.name);
+      EAMessage.error("名字不能为空");
+      return;
+    }
+    if (!userEmail || !re.test(userEmail)) {
+      setUserEmail(userInfo?.email);
+      EAMessage.error("请正确填写邮箱");
+      return;
+    }
+    const payload = {
+      name: userName as string,
+      avatar: userInfo?.avatar as string,
+      email: userEmail as string,
+    };
+    const res = await updateUserInfo(payload);
+    if (res.data.success) {
+      setUser(res.data.data);
+      EAMessage.success(res.data.message);
+    } else {
+      setUserEmail(userInfo?.email);
+      setUserName(userInfo?.name);
+    }
+  };
+
   return (
     <div className="flex w-full h-screen overflow-hidden transition-all duration-300">
       {/* 左侧菜单栏 */}
@@ -266,22 +318,41 @@ const Home: React.FC = () => {
               className="flex justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
             />
             <EATheme />
-            <EAButton
-              text="好友列表"
-              onClick={() => {
-                toggleChat(true);
-                handleClose();
-                setCurrentMessage(undefined);
-              }}
-              icon={
-                <img
-                  src={actualTheme === "dark" ? NewChatDark : NewChatLight}
-                  alt=""
-                  className="w-4 h-4 text-white"
-                />
-              }
-              className="flex justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
-            />
+            <div className="relative">
+              {unreadMsg.length > 0 && (
+                <span
+                  className="
+                    absolute top-1/2 right-2 -translate-y-1/2
+                    min-w-[18px] h-[18px]
+                    px-1
+                    flex items-center justify-center
+                    rounded-full
+                    bg-rose-500/90
+                    text-[11px] font-medium text-white
+                    shadow-sm
+                  "
+                >
+                  {unreadMsg.length > 99 ? "99+" : unreadMsg.length}
+                </span>
+              )}
+
+              <EAButton
+                text="好友列表"
+                onClick={() => {
+                  toggleChat(true);
+                  handleClose();
+                  setCurrentMessage(undefined);
+                }}
+                icon={
+                  <img
+                    src={actualTheme === "dark" ? NewChatDark : NewChatLight}
+                    alt=""
+                    className="w-4 h-4 text-white"
+                  />
+                }
+                className="flex w-full justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
+              />
+            </div>
           </div>
         </div>
         {/* 让上半部分（EAMenu）自动占满剩余空间 */}
@@ -317,7 +388,7 @@ const Home: React.FC = () => {
           >
             <div
               ref={messageContainerRef}
-              className="overflow-y-auto w-[full] flex flex-col items-center "
+              className="overflow-y-auto w-[full] flex flex-col items-center gap-2"
             >
               <img
                 src={actualTheme === "dark" ? MenuFoldLight : MenuFoldDark}
@@ -328,7 +399,7 @@ const Home: React.FC = () => {
                 onClick={() => setSlideHide(!slideHide)}
               />
 
-              {messages.map((item, index) => {
+              {messages.map((item) => {
                 return (
                   <div
                     key={item.id}
@@ -337,14 +408,14 @@ const Home: React.FC = () => {
                     }`}
                   >
                     {/* 思考内容 */}
-                    {item.think_content && (
+                    {/* {item.think_content && (
                       <div className="px-3  w-[100%] py-2 rounded-lg rounded-bl-none rounded-br-none mt-2 bg-[var(--Ai-think-bg)] text-[var(--Ai-think-text)]">
                         <EAMarkdown
                           content={item.think_content}
                           isFinished={item.finished}
                         />
                       </div>
-                    )}
+                    )} */}
                     {/* 工具名称 */}
                     {item.tool_name && (
                       <div
@@ -392,16 +463,35 @@ const Home: React.FC = () => {
                     {/* 主要内容 */}
                     {item.content && (
                       <div
-                        className={`px-4 py-2  leading-8 ${
-                          item.sender === 0
-                            ? "bg-blue-500 text-white msx-w-[100%] rounded-lg"
-                            : "bg-[var(--Ai-content-bg)] w-[100%] rounded-lg rounded-tl-none rounded-tr-none text-[var(--Ai-content-text)]"
+                        className={`leading-8 ${
+                          item.sender !== 0 &&
+                          "bg-[transparent] w-[100%] rounded-lg text-[var(--Ai-content-text)]"
                         }`} // <-- 关键
                       >
-                        <EAMarkdown
-                          content={item.content}
-                          isFinished={item.finished}
-                        />
+                        {item.sender === 1 ? (
+                          <div className="flex flex-col gap-2">
+                            <EAMarkdown
+                              content={item.content}
+                              isFinished={item.finished}
+                            />
+                            {item.finished && (
+                              <EAActionBar content={item.content} />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="group flex flex-col gap-2 items-end relative">
+                            <div className="text-[var(--Ai-content-text)] px-4 py-2 text-white msx-w-[100%] rounded-lg  bg-[var(--Ai-content-bg)] text-sm font-normal whitespace-pre-wrap">
+                              {item.content}
+                            </div>
+
+                            <div className="absolute bottom-[-25px] right-0 opacity-0 group-hover:opacity-100 transition">
+                              <EAActionBar
+                                content={item.content}
+                                onlyCopy={true}
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -415,7 +505,7 @@ const Home: React.FC = () => {
             <div
               ref={inputWrapperRef}
               className={`flex flex-col justify-center items-center w-full translation-all duration-500 z-[9] transform-gpu relative ${
-                messages.length > 0 ? "translate-y-[0%]" : "translate-y-[-220%]"
+                messages.length > 0 ? "translate-y-[0%]" : "translate-y-[-35vh]"
               }`}
             >
               <button
@@ -444,6 +534,7 @@ const Home: React.FC = () => {
       <EADrawer
         message={currentMessage}
         handleClose={() => {
+          updateUserChat([]);
           setCurrentMessage(undefined);
           toggleChat(false);
         }}
@@ -470,13 +561,17 @@ const Home: React.FC = () => {
             <div className="flex flex-col gap-[10px]">
               <input
                 type="text"
-                value={userInfo?.name}
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                onBlur={handleUserInfo}
                 placeholder="Type here"
                 className="input input-ghost w-[95%] !py-[10px] !px-0 text-lg h-5 hover:outline-[1px] focus:outline-[1px] transition-all duration-300"
               />
               <input
-                type="text"
-                value={userInfo?.email}
+                type="email"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                onBlur={handleUserInfo}
                 placeholder="Type here"
                 className="input input-ghost w-[95%] !py-[10px] !px-0 text-sm text-gray-500 outline-[var(--color-base-content)] h-5 hover:outline-[1px] focus:outline-none transition-all duration-300"
               />

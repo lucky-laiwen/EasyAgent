@@ -7,7 +7,7 @@ export function useStreamAIMessage() {
   /* ---------- 1. 缓冲池 ---------- */
   const bufferRef = useRef<{
     content: string;
-    tool_content?: Array<any>;
+    tool_content?: any;
     tool_name?: string;
     type?: string;
     think_content?: string;
