@@ -3,11 +3,11 @@ import Login from "@/pages/login";
 import Home from "@/pages/layout";
 const router = createBrowserRouter([
   {
-    path: "/login",
+    path: "/EasyAgent/login",
     element: <Login />,
   },
   {
-    path: "/",
+    path: "/EasyAgent/",
     element: <Home />,
   },
 ]);
