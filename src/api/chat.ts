@@ -33,3 +33,8 @@ export function updateChatTitle(data: SendMessageSchemas) {
 export function deleteChat(chat_id: number) {
   return request.delete(`/chat/delete_chat/${chat_id}`);
 }
+
+// 被分享用户取消分享
+export function unShareChat(chat_id: number) {
+  return request.get(`/chat/cancel_share/${chat_id}`);
+}

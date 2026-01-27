@@ -46,7 +46,7 @@ const CodeBlock = memo(
         </SyntaxHighlighter>
       </div>
     );
-  }
+  },
 );
 
 // 目录树组件
@@ -197,7 +197,7 @@ const EAMarkdown = memo(
         </ReactMarkdown>
       </div>
     );
-  }
+  },
 );
 
 export default EAMarkdown;

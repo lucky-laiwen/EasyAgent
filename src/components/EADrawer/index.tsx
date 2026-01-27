@@ -3,6 +3,7 @@ import {
   useStore,
   type ChatItem,
   type ToolContentSchema,
+  type UserChatSchema,
   type WeatherSearchItem,
 } from "@/store/store";
 import { Empty } from "antd";
@@ -15,15 +16,28 @@ import {
   type UserFriendSchema,
   updateAllChatMsg,
 } from "@/store/store";
-import { getHistory, getAllMessageList } from "@/api/userChat";
+import {
+  getHistory,
+  getAllMessageList,
+  confirmReceiveSharedMessage,
+} from "@/api/userChat";
 import { useState, useEffect, useRef, useMemo } from "react";
 import dayjs from "dayjs";
 import Logo from "@/assets/EasyAgent-Logo.svg";
+import EAMessage from "../EAMessage";
 interface EADrawerSchema {
   message?: ChatItem; // 支持可选
   footer?: React.ReactNode | null;
   className?: string;
   handleClose?: () => void;
+  getHistoryList?: () => void;
+  chatList: ChatItem[];
+  handleChatClick: (id: number) => void;
+}
+
+interface ShareChatSchema {
+  id: number;
+  title: string;
 }
 
 const EADrawer: React.FC<EADrawerSchema> = ({
@@ -31,6 +45,9 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   footer,
   className,
   handleClose,
+  getHistoryList,
+  chatList,
+  handleChatClick,
 }) => {
   const chatOpen = useStore((state) => state.chatOpen);
   const [active, setActive] = useState("news"); // 当前高亮 tab
@@ -44,6 +61,8 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   const socketRef = useStore((state) => state.socket);
   const chatRefs = useRef<(HTMLDivElement | null)[]>([]);
   const chatListRef = useRef<HTMLDivElement | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [shareChat, setShareChat] = useState<ShareChatSchema | null>(null);
   useEffect(() => {
     if (!chatOpen) {
       curFriendInfo.current = null;
@@ -60,17 +79,22 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
       socketRef.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        if (data.type === "error") {
+          EAMessage.error(data.message);
+        }
 
         if (data.type === "update_message_status") {
           useStore.setState((state) => ({
             userChat: state.userChat.map((item) =>
-              item.id === data.id ? { ...item, status: data.status } : item
+              item.id === data.id ? { ...item, status: data.status } : item,
             ),
           }));
           useStore.setState((state) => ({
             unReadMsg: state.unReadMsg.filter((item) => item.id !== data.id),
           }));
         } else {
+          console.log(data);
+
           if (data.receiver_id === userInfo?.id) {
             updateAllChatMsg([...allMsg, data]);
           }
@@ -103,7 +127,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
             .getState()
             .userChat.find(
               (m) =>
-                m.id === id && m.status === 0 && m.sender_id !== userInfo?.id
+                m.id === id && m.status === 0 && m.sender_id !== userInfo?.id,
             );
 
           // ❌ 已读 / 不存在 / 自己发的 → 直接退出并取消观察
@@ -117,7 +141,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
               JSON.stringify({
                 to_user_id: curFriendInfo.current?.friend.id,
                 messageId: id,
-              })
+              }),
             );
           }
 
@@ -125,7 +149,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
           observer.unobserve(el);
         });
       },
-      { root: null, threshold: 1 }
+      { root: null, threshold: 1 },
     );
 
     chatRefs.current.forEach((el) => {
@@ -162,12 +186,15 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       JSON.stringify({
         to_user_id: curFriendInfo.current?.friend.id,
         content: inputValue,
-      })
+        chatId: shareChat?.id,
+        title: shareChat?.title,
+      }),
     );
     const res = await getAllMessageList();
     if (res.data.success) {
       updateAllChatMsg(res.data.data || []);
     }
+    setShareChat(null);
 
     if (curFriendInfo.current?.friend.id) {
       getChatList(curFriendInfo.current?.friend.id);
@@ -197,6 +224,8 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
   const getChatList = async (id: number) => {
     const res = await getHistory(id);
+    console.log(res.data.data);
+
     updateUserChat(res.data.data || []);
     const filteredFriend = userFriend.filter((item) => item.friend.id === id);
     curFriendInfo.current =
@@ -218,10 +247,10 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     // 2. 排序好友
     return [...userFriend].sort((a, b) => {
       const unreadA = allMsg.some(
-        (m) => m.sender_id === a.friend.id && m.status === 0
+        (m) => m.sender_id === a.friend.id && m.status === 0,
       );
       const unreadB = allMsg.some(
-        (m) => m.sender_id === b.friend.id && m.status === 0
+        (m) => m.sender_id === b.friend.id && m.status === 0,
       );
 
       if (unreadA !== unreadB) {
@@ -277,6 +306,92 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     }
   };
 
+  // 在 EADrawer 组件内部添加拖放处理
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation(); // 阻止事件冒泡
+
+    // 检查是否已有分享的聊天
+    if (shareChat) {
+      EAMessage.info("只能同时分享一个聊天");
+      setIsDragOver(false); // 重置拖拽状态
+      return;
+    }
+
+    try {
+      const dragData = e.dataTransfer.getData("application/chat");
+
+      if (dragData) {
+        const parsedData = JSON.parse(dragData);
+        const is_exist = userChat.find(
+          (item) => item.share_chat?.chat_id === parsedData.id,
+        );
+        if (is_exist) {
+          EAMessage.info("您已经分享过此聊天");
+          setIsDragOver(false); // 重置拖拽状态
+          return;
+        }
+        setShareChat(parsedData);
+        setIsDragOver(false); // 成功设置分享后重置拖拽状态
+      }
+    } catch (error) {
+      console.error("解析拖拽数据失败:", error);
+      setIsDragOver(false); // 发生错误时也重置状态
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation(); // 阻止默认行为和事件冒泡
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // 检查是否真的离开了拖拽区域
+    const rect = chatListRef.current?.getBoundingClientRect();
+    if (rect) {
+      if (
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
+        e.clientY > rect.bottom
+      ) {
+        setIsDragOver(false);
+      }
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  // 确认接受分享
+  const allowShard = async (msg: UserChatSchema) => {
+    const is_has = chatList.find((item) => item.id === msg.share_chat?.chat_id);
+    if (is_has && msg.share_chat?.chat_id) {
+      handleChatClick(msg.share_chat?.chat_id);
+      return;
+    }
+    if (msg.share_chat?.chat_id) {
+      const res = await confirmReceiveSharedMessage(msg.share_chat.id);
+      if (res.data.success) {
+        getHistoryList?.();
+        handleChatClick(msg.share_chat.chat_id);
+      } else {
+        EAMessage.error("此聊天已经失效");
+      }
+    }
+  };
+
+  // 输入框取消分享
+  const handleCancelShare = () => {
+    setShareChat(null);
+    setIsDragOver(false);
+  };
+
   /** Drawer 主体必须 return */
   return (
     <div
@@ -288,8 +403,8 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                 message.tool_name === "weather_query" ? "25%" : "35%"
               }] !opacity-100`
             : chatOpen
-            ? "w-[35%] !opacity-100"
-            : "w-0 !opacity-0"
+              ? "w-[35%] !opacity-100"
+              : "w-0 !opacity-0"
         }
         ${className ?? ""}
       `}
@@ -297,7 +412,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       {/* Title */}
       <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
         <h3 className="text-lg font-bold">
-          {chatOpen ? "聊天" : message?.tool_name ?? ""}
+          {chatOpen ? "聊天" : (message?.tool_name ?? "")}
         </h3>
         <button
           className="text-lg font-bold cursor-pointer"
@@ -346,7 +461,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                               .filter(
                                 (f) =>
                                   f.sender_id === item.friend.id ||
-                                  f.receiver_id === item.friend.id
+                                  f.receiver_id === item.friend.id,
                               )
                               .at(-1)?.content || ""}
                           </div>
@@ -356,7 +471,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                         {unreadMsg.filter(
                           (unMsg) =>
                             unMsg.sender_id === item.friend.id &&
-                            unMsg.status === 0
+                            unMsg.status === 0,
                         ).length > 0 && (
                           <span
                             className="
@@ -373,7 +488,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                               unreadMsg.filter(
                                 (unMsg) =>
                                   unMsg.sender_id === item.friend.id &&
-                                  unMsg.status === 0
+                                  unMsg.status === 0,
                               ).length
                             }
                           </span>
@@ -386,16 +501,36 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
               {/* 右侧：聊天内容 */}
               {userChat.length > 0 || curFriendInfo.current ? (
-                <div className="flex flex-col flex-1 overflow-y-auto h-full ">
+                <div
+                  className="flex flex-col flex-1 overflow-y-auto h-full drop-zone relative"
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                >
+                  {isDragOver && !shareChat && (
+                    <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
+                      <div className="absolute inset-0 bg-[var(--Ai-think-bg)]/60 backdrop-blur-sm flex items-center justify-center">
+                        <div className="text-center p-4">
+                          <div className="text-2xl mb-2">📤</div>
+                          <span className="text-blue-600 font-semibold text-lg">
+                            松开即可发送给好友
+                          </span>
+                          <div className="text-blue-500 text-sm mt-1">
+                            拖拽聊天记录到此处分享
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {/* 聊天框 */}
                   {userChat.length > 0 && (
                     <div
-                      className="w-full h-[80%] overflow-y-auto p-4 "
+                      className={`w-full h-[80%] overflow-y-auto p-4 relative transition-all duration-200`}
                       ref={chatListRef}
                     >
                       {userChat.map((item) => {
                         const isMe = item.sender_id === userInfo?.id;
-
                         return (
                           <div
                             key={item.id}
@@ -424,8 +559,46 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                                 {formatDate(item.created_at)}
                               </time>
                             </div>
-                            <div className="chat-bubble whitespace-pre-wrap">
-                              {item.content}
+                            <div className="chat-message flex flex-col gap-2 max-w-[70%]">
+                              {item.share_chat && (
+                                <div
+                                  className="
+                                    bg-base-200/60
+                                    rounded-lg
+                                    p-3
+                                    text-sm
+                                    border-l-4
+                                    border-primary
+                                    cursor-pointer
+                                    hover:bg-base-200
+                                    transition
+                                  "
+                                  onClick={() => {
+                                    if (item.share_chat?.id && !isMe) {
+                                      allowShard(item);
+                                    }
+                                  }}
+                                >
+                                  <div className="text-xs opacity-60 mb-1 flex items-center gap-1">
+                                    <span>🔗</span>
+                                    <span>分享的聊天</span>
+                                  </div>
+
+                                  <div className="font-medium line-clamp-1">
+                                    {item.share_chat.title}
+                                  </div>
+
+                                  <div className="text-xs opacity-60 mt-1">
+                                    点击查看完整内容
+                                  </div>
+                                </div>
+                              )}
+
+                              <div
+                                className={`chat-bubble whitespace-pre-wrap ${isMe && "ml-[auto]"}`}
+                              >
+                                {item.content}
+                              </div>
                             </div>
                             <div className="chat-footer opacity-50">
                               {item.status === 0 ? "未读" : "已读"}
@@ -436,7 +609,41 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                     </div>
                   )}
                   {/* 输入框 */}
-                  <div className="w-full h-[20%] mt-[auto] border-t border-gray-200">
+                  <div className="w-full h-[20%] mt-[auto] border-t border-gray-200 overflow-y-auto">
+                    {shareChat && (
+                      <div className="px-4 py-2 border-t border-gray-200 bg-blue-50 rounded-lg mx-4 mt-2 relative">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="flex-shrink-0">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5 text-blue-500"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                准备分享:
+                              </p>
+                              <p className="text-sm text-gray-500 truncate max-w-xs">
+                                {shareChat.title}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={handleCancelShare}
+                              className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <textarea
                       className="textarea resize-none w-full !h-[100%] outline-none border-none focus:outline-none"
                       placeholder="请输入内容"

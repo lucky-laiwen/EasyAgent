@@ -18,3 +18,8 @@ export const getUnreadMessageList = () => {
 export const getAllMessageList = () => {
   return request.get(`/user_chat/get_all_messages`);
 };
+
+// 确认接收分享的消息
+export const confirmReceiveSharedMessage = (chat_id: number) => {
+  return request.get(`/user_chat/accept_share/${chat_id}`);
+};

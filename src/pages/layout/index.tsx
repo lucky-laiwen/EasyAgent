@@ -50,6 +50,7 @@ export interface ChatItem {
   think_content?: string;
   type?: string;
   finished?: boolean;
+  source?: "own" | "shared";
 }
 
 const Home: React.FC = () => {
@@ -77,7 +78,7 @@ const Home: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userName, setUserName] = useState<string | undefined>(userInfo?.name);
   const [userEmail, setUserEmail] = useState<string | undefined>(
-    userInfo?.email
+    userInfo?.email,
   );
   // 将对话聊天滚动到最底部
   const scrollToBottom = () => {
@@ -161,11 +162,15 @@ const Home: React.FC = () => {
         type: item.think_content ? "think" : "text",
         finished: true,
       }));
+      setSelectedMenuKey(id.toString());
       setMessages(messagesWithType);
       setCurrentChatId(id);
       setPageLoading(false);
     } else {
       setPageLoading(false);
+      handleNewChat();
+      EAMessage.error("此聊天不存在");
+      getHisttoryList();
     }
   };
 
@@ -283,6 +288,15 @@ const Home: React.FC = () => {
     }
   };
 
+  // 创建新会话
+  const handleNewChat = () => {
+    setMessages([]);
+    setCurrentChatId(null);
+    setSelectedMenuKey("");
+    handleClose();
+    setCurrentMessage(undefined);
+  };
+
   return (
     <div className="flex w-full h-screen overflow-hidden transition-all duration-300">
       {/* 左侧菜单栏 */}
@@ -301,13 +315,7 @@ const Home: React.FC = () => {
             </div>
             <EAButton
               text="创建新会话"
-              onClick={() => {
-                setMessages([]);
-                setCurrentChatId(null);
-                setSelectedMenuKey("");
-                handleClose();
-                setCurrentMessage(undefined);
-              }}
+              onClick={handleNewChat}
               icon={
                 <img
                   src={actualTheme === "dark" ? AiChatDark : AiChatLight}
@@ -356,7 +364,7 @@ const Home: React.FC = () => {
           </div>
         </div>
         {/* 让上半部分（EAMenu）自动占满剩余空间 */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-2">
           <EAMenu
             className="!bg-transparent"
             chatList={chatList}
@@ -373,7 +381,7 @@ const Home: React.FC = () => {
           onClick={() => {
             setIsModalOpen(true);
           }}
-          className="flex items-center gap-2 p-4 transition-all duration-300 hover:bg-[var(--Ai-think-bg)] border-t-1 border-white/10 cursor-pointer"
+          className="flex items-center gap-2 p-4 transition-all duration-300 hover:bg-[var(--Ai-think-bg)] border-t-1 border-[var(--Ai-think-bg)] cursor-pointer"
         >
           <Avatar size={36} src={userInfo?.avatar} />
           <div className="text-[14px]">{userInfo?.name}</div>
@@ -480,7 +488,7 @@ const Home: React.FC = () => {
                           </div>
                         ) : (
                           <div className="group flex flex-col gap-2 items-end relative">
-                            <div className="text-[var(--Ai-content-text)] px-4 py-2 text-white msx-w-[100%] rounded-lg  bg-[var(--Ai-content-bg)] text-sm font-normal whitespace-pre-wrap">
+                            <div className="text-[var(--Ai-content-text)] px-4 py-2 msx-w-[100%] rounded-lg  bg-[var(--Ai-content-bg)] text-sm font-normal whitespace-pre-wrap">
                               {item.content}
                             </div>
 
@@ -538,6 +546,9 @@ const Home: React.FC = () => {
           setCurrentMessage(undefined);
           toggleChat(false);
         }}
+        handleChatClick={handleChatClick}
+        chatList={chatList}
+        getHistoryList={getHisttoryList}
       />
 
       <EAModal

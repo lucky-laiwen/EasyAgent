@@ -69,8 +69,18 @@ interface User {
   avatar: string;
 }
 
+// 分享用户聊天
+interface ChatShareSchema {
+  id: number;
+  chat_id: number;
+  owner_id: number;
+  permission: number;
+  shared_to_id: number;
+  created_at: string;
+  title: string;
+}
 // 聊天信息
-interface UserChatSchema {
+export interface UserChatSchema {
   id: number;
   sender_id: number;
   receiver_id: number;
@@ -78,6 +88,7 @@ interface UserChatSchema {
   status: number;
   created_at: string;
   updated_at: string;
+  share_chat?: ChatShareSchema;
 }
 
 // 好友信息
@@ -126,10 +137,10 @@ export const useStore = create<StoreSchema>(() => ({
       ? window.matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light"
-      : (localStorage.getItem("theme") as "dark" | "light") ??
+      : ((localStorage.getItem("theme") as "dark" | "light") ??
         (window.matchMedia("(prefers-color-scheme: dark)").matches
           ? "dark"
-          : "light"),
+          : "light")),
 
   user: localStorage.getItem("user")
     ? JSON.parse(localStorage.getItem("user") as string)
