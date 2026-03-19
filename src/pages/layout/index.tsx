@@ -546,6 +546,7 @@ const Home: React.FC = () => {
           setCurrentMessage(undefined);
           toggleChat(false);
         }}
+        getFriendListApi={getFriendListApi}
         handleChatClick={handleChatClick}
         chatList={chatList}
         getHistoryList={getHisttoryList}

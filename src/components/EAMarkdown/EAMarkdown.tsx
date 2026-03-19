@@ -85,7 +85,7 @@ const EAMarkdown = memo(
       if (index < content.length && !isFinished) {
         const timer = setTimeout(() => {
           setIndex((pre) => pre + 5);
-        }, 20);
+        }, 16);
         return () => {
           clearTimeout(timer);
         };
@@ -93,7 +93,7 @@ const EAMarkdown = memo(
     }, [index, content.length, isFinished]);
 
     return (
-      <div className={className}>
+      <div className={`${className}`}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -184,10 +184,6 @@ const EAMarkdown = memo(
             ),
             li: ({ children, ...props }) => (
               <li className="text-[var(--Ai-content-text)]" {...props}>
-                {/*
-                  React-Markdown 会把纯文本 listItem 包一层 <p>，
-                  我们直接把 children 里的 <p> 脱掉即可
-                */}
                 <div className="inline">{children}</div>
               </li>
             ),

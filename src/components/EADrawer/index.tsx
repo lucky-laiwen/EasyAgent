@@ -25,6 +25,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import dayjs from "dayjs";
 import Logo from "@/assets/EasyAgent-Logo.svg";
 import EAMessage from "../EAMessage";
+import SearchInput from "./ToolPage/SearchInput";
 interface EADrawerSchema {
   message?: ChatItem; // 支持可选
   footer?: React.ReactNode | null;
@@ -33,6 +34,7 @@ interface EADrawerSchema {
   getHistoryList?: () => void;
   chatList: ChatItem[];
   handleChatClick: (id: number) => void;
+  getFriendListApi: () => void;
 }
 
 interface ShareChatSchema {
@@ -48,6 +50,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   getHistoryList,
   chatList,
   handleChatClick,
+  getFriendListApi,
 }) => {
   const chatOpen = useStore((state) => state.chatOpen);
   const [active, setActive] = useState("news"); // 当前高亮 tab
@@ -63,6 +66,10 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [shareChat, setShareChat] = useState<ShareChatSchema | null>(null);
+
+  const newsRef = useRef<HTMLDivElement>(null);
+  const textsRef = useRef<HTMLDivElement>(null);
+  const imagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!chatOpen) {
       curFriendInfo.current = null;
@@ -82,7 +89,6 @@ const EADrawer: React.FC<EADrawerSchema> = ({
         if (data.type === "error") {
           EAMessage.error(data.message);
         }
-
         if (data.type === "update_message_status") {
           useStore.setState((state) => ({
             userChat: state.userChat.map((item) =>
@@ -92,9 +98,9 @@ const EADrawer: React.FC<EADrawerSchema> = ({
           useStore.setState((state) => ({
             unReadMsg: state.unReadMsg.filter((item) => item.id !== data.id),
           }));
-        } else {
+        } else if (data.type === "add_friend") {
           console.log(data);
-
+        } else {
           if (data.receiver_id === userInfo?.id) {
             updateAllChatMsg([...allMsg, data]);
           }
@@ -224,8 +230,6 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
   const getChatList = async (id: number) => {
     const res = await getHistory(id);
-    console.log(res.data.data);
-
     updateUserChat(res.data.data || []);
     const filteredFriend = userFriend.filter((item) => item.friend.id === id);
     curFriendInfo.current =
@@ -290,9 +294,26 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
           {/* 2. 内容区 */}
           <div className="pb-6 pt-2 px-2">
-            {active === "news" && <News newsData={toolContent.news} />}
-            {active === "text" && <Texts TextsData={toolContent.text} />}
-            {active === "image" && <Images imagesData={toolContent.imgs} />}
+            <div
+              ref={newsRef}
+              style={{ display: active === "news" ? "block" : "none" }}
+            >
+              <News newsData={toolContent.news} />
+            </div>
+
+            <div
+              ref={textsRef}
+              style={{ display: active === "text" ? "block" : "none" }}
+            >
+              <Texts TextsData={toolContent.text} />
+            </div>
+
+            <div
+              ref={imagesRef}
+              style={{ display: active === "image" ? "block" : "none" }}
+            >
+              <Images imagesData={toolContent.imgs} />
+            </div>
           </div>
         </div>
       );
@@ -433,48 +454,51 @@ const EADrawer: React.FC<EADrawerSchema> = ({
           {chatOpen && (
             <div className="w-full h-full flex">
               {/* 左侧：好友列表 */}
-              {userFriend.length > 0 && (
-                <div className="w-[30%] overflow-y-auto h-full border-r border-gray-200">
-                  {sortedFriends.map((item) => {
-                    return (
-                      <div
-                        key={item.id}
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${
-                          item.friend.id === curFriendInfo.current?.friend.id
-                            ? "bg-[var(--Ai-think-bg)]"
-                            : "hover:bg-[var(--Ai-think-bg)]/40"
-                        }`}
-                        onClick={() => getChatList(item.friend.id)}
-                      >
-                        <img
-                          src={item.friend.avatar}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
+              <div className="w-[30%] border-r border-gray-200">
+                {/* 搜索框 */}
+                <SearchInput getFriendListApi={getFriendListApi} />
+                {userFriend.length > 0 && (
+                  <div className="w-full overflow-y-auto h-full">
+                    {sortedFriends.map((item) => {
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition ${
+                            item.friend.id === curFriendInfo.current?.friend.id
+                              ? "bg-[var(--Ai-think-bg)]"
+                              : "hover:bg-[var(--Ai-think-bg)]/40"
+                          }`}
+                          onClick={() => getChatList(item.friend.id)}
+                        >
+                          <img
+                            src={item.friend.avatar}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
 
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">
-                            {item.friend.name}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">
+                              {item.friend.name}
+                            </div>
+                            <div className="text-xs text-[var(--Ai-think-text)]">
+                              {allMsg
+                                .filter(
+                                  (f) =>
+                                    f.sender_id === item.friend.id ||
+                                    f.receiver_id === item.friend.id,
+                                )
+                                .at(-1)?.content || ""}
+                            </div>
                           </div>
-                          <div className="text-xs text-[var(--Ai-think-text)]">
-                            {allMsg
-                              .filter(
-                                (f) =>
-                                  f.sender_id === item.friend.id ||
-                                  f.receiver_id === item.friend.id,
-                              )
-                              .at(-1)?.content || ""}
-                          </div>
-                        </div>
 
-                        {/* 未读消息数 */}
-                        {unreadMsg.filter(
-                          (unMsg) =>
-                            unMsg.sender_id === item.friend.id &&
-                            unMsg.status === 0,
-                        ).length > 0 && (
-                          <span
-                            className="
+                          {/* 未读消息数 */}
+                          {unreadMsg.filter(
+                            (unMsg) =>
+                              unMsg.sender_id === item.friend.id &&
+                              unMsg.status === 0,
+                          ).length > 0 && (
+                            <span
+                              className="
                           min-w-[18px] h-[18px]
                           px-1
                           flex items-center justify-center
@@ -483,21 +507,22 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                           text-[11px] font-medium text-white
                           shadow-sm
                         "
-                          >
-                            {
-                              unreadMsg.filter(
-                                (unMsg) =>
-                                  unMsg.sender_id === item.friend.id &&
-                                  unMsg.status === 0,
-                              ).length
-                            }
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                            >
+                              {
+                                unreadMsg.filter(
+                                  (unMsg) =>
+                                    unMsg.sender_id === item.friend.id &&
+                                    unMsg.status === 0,
+                                ).length
+                              }
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {/* 右侧：聊天内容 */}
               {userChat.length > 0 || curFriendInfo.current ? (

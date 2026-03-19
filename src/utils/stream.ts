@@ -90,7 +90,7 @@ export function useStreamAIMessage() {
       flush();
       updateMessage({ id: aiMessageId, finished: true });
     },
-    [flush]
+    [flush],
   );
 
   return { streamAIMessage };
