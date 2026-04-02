@@ -4,7 +4,7 @@ type SendMessageSchemas = {
 };
 
 export async function* sendMessage(
-  params: SendMessageSchemas
+  params: SendMessageSchemas,
 ): AsyncGenerator<string, void, unknown> {
   const res = await fetch("http://localhost:8000/chat/stream", {
     method: "POST",

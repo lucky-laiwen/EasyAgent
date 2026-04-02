@@ -19,11 +19,7 @@ interface SearchResult {
   pending_mutual_friends: UserSchema[];
 }
 
-interface SearchInputProps {
-  getFriendListApi: () => void;
-}
-
-const SearchInput = ({ getFriendListApi }: SearchInputProps) => {
+const SearchInput = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [searchResult, setSearchResult] = useState<SearchResult>();

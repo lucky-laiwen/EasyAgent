@@ -12,24 +12,56 @@ interface EAInputSchema {
 const EAInput = (props: EAInputSchema) => {
   const { inputValue, setInputValue, sendMessage, loading, className } = props;
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const isComposing = useRef(false);
+  // 用于延迟检查，防止拼音输入法英文直接回车上屏时误判
+  const compositionEndTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
       inputRef.current.style.height = `${Math.min(
         inputRef.current.scrollHeight,
-        200
+        200,
       )}px`;
     }
   }, [inputValue]);
-  // 监听回车发送
+
+  const handleCompositionStart = () => {
+    isComposing.current = true;
+    // 清除可能存在的延迟检查
+    if (compositionEndTimer.current) {
+      clearTimeout(compositionEndTimer.current);
+    }
+  };
+
+  const handleCompositionEnd = () => {
+    // 使用 setTimeout 延迟重置，确保在 keydown 之后
+    compositionEndTimer.current = setTimeout(() => {
+      isComposing.current = false;
+    }, 0);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 双重检查：isComposing ref 或 e.isComposing 任一成立都视为正在组合输入
+    if (isComposing.current) {
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault(); // 防止换行
+      e.preventDefault();
       inputRef.current?.blur();
       sendMessage();
     }
   };
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (compositionEndTimer.current) {
+        clearTimeout(compositionEndTimer.current);
+      }
+    };
+  }, []);
 
   return (
     <div className={`${styles["container_chat_bot"]} ${className}`}>
@@ -44,6 +76,8 @@ const EAInput = (props: EAInputSchema) => {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
               style={{
                 resize: "none",
               }}
@@ -52,7 +86,6 @@ const EAInput = (props: EAInputSchema) => {
 
           <div className={styles["options"]}>
             <div className={styles["btns-add"]}>
-              {/* 这里保留按钮逻辑 */}
               <button>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -106,7 +139,7 @@ const EAInput = (props: EAInputSchema) => {
               className={`${styles["btn-submit"]} ${
                 loading ? styles["focus-svg"] : ""
               }`}
-              onClick={sendMessage} // ✅ 点击发送消息
+              onClick={sendMessage}
               disabled={loading}
             >
               <i>

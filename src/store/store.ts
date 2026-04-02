@@ -61,7 +61,7 @@ export interface ChatItem {
 }
 
 // 用户信息
-interface User {
+export interface User {
   id: number;
   email: string;
   name: string;
@@ -103,6 +103,18 @@ export interface UserFriendSchema {
   };
 }
 
+// 系统信息
+export interface SystemInfoSchema {
+  id: number;
+  user_id: number;
+  title: string;
+  content: string;
+  is_read: number;
+  created_at: string;
+  source_id: number;
+  action_type: number;
+}
+
 // 全局状态结构
 interface StoreSchema {
   socket: WebSocket | null;
@@ -114,6 +126,7 @@ interface StoreSchema {
   showLoading: () => void;
   hideLoading: () => void;
   userChat: UserChatSchema[] | [];
+  systemInfo: SystemInfoSchema[] | [];
   userFriend: UserFriendSchema[] | [];
   chatOpen: boolean;
   unReadMsg: UserChatSchema[] | [];
@@ -127,6 +140,7 @@ export const useStore = create<StoreSchema>(() => ({
   userFriend: [],
   userChat: [],
   chatOpen: false,
+  systemInfo: [],
   unReadMsg: [],
   allChatMsg: [],
   theme:

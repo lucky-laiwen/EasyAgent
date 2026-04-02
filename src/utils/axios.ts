@@ -25,13 +25,13 @@ request.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 // 响应拦截器（保留 AxiosResponse<ApiResponse<T>>）
 request.interceptors.response.use(
   <T>(
-    response: AxiosResponse<ApiResponse<T>>
+    response: AxiosResponse<ApiResponse<T>>,
   ): AxiosResponse<ApiResponse<T>> => {
     return response;
   },
@@ -43,12 +43,12 @@ request.interceptors.response.use(
     }
     EAMessage.error(error.message);
     return Promise.reject(error);
-  }
+  },
 );
 
 // ✅ 统一封装：返回 ApiResponse<T>
 export const apiRequest = async <T = unknown>(
-  config: AxiosRequestConfig
+  config: AxiosRequestConfig,
 ): Promise<ApiResponse<T>> => {
   const res: AxiosResponse<ApiResponse<T>> = await request(config);
   return res.data;

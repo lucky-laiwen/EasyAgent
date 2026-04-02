@@ -23,9 +23,11 @@ import {
 } from "@/api/userChat";
 import { useState, useEffect, useRef, useMemo } from "react";
 import dayjs from "dayjs";
-import Logo from "@/assets/EasyAgent-Logo.svg";
+import UserChatIcon from "@/LootieJson/UserChat.json";
 import EAMessage from "../EAMessage";
 import SearchInput from "./ToolPage/SearchInput";
+import Lottie from "lottie-react";
+import SystemMessage from "./ToolPage/SystemMessage";
 interface EADrawerSchema {
   message?: ChatItem; // 支持可选
   footer?: React.ReactNode | null;
@@ -66,10 +68,11 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [shareChat, setShareChat] = useState<ShareChatSchema | null>(null);
-
+  const isSystem = useRef<boolean>(false);
   const newsRef = useRef<HTMLDivElement>(null);
   const textsRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!chatOpen) {
       curFriendInfo.current = null;
@@ -99,7 +102,9 @@ const EADrawer: React.FC<EADrawerSchema> = ({
             unReadMsg: state.unReadMsg.filter((item) => item.id !== data.id),
           }));
         } else if (data.type === "add_friend") {
-          console.log(data);
+          getFriendListApi();
+        } else if (data.type === "accept_friend_request") {
+          getFriendListApi();
         } else {
           if (data.receiver_id === userInfo?.id) {
             updateAllChatMsg([...allMsg, data]);
@@ -228,12 +233,20 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     return createdAt.format("YYYY-MM-DD HH:mm");
   }
 
-  const getChatList = async (id: number) => {
-    const res = await getHistory(id);
-    updateUserChat(res.data.data || []);
-    const filteredFriend = userFriend.filter((item) => item.friend.id === id);
-    curFriendInfo.current =
-      filteredFriend.length > 0 ? filteredFriend[0] : null;
+  const getChatList = async (id: number | string) => {
+    if (id === "system") {
+      isSystem.current = true;
+      // 切到系统消息时，清空当前好友聊天，避免 UI 混淆
+      updateUserChat([]);
+      curFriendInfo.current = null;
+    } else if (typeof id === "number") {
+      isSystem.current = false;
+      const res = await getHistory(id);
+      updateUserChat(res.data.data || []);
+      const filteredFriend = userFriend.filter((item) => item.friend.id === id);
+      curFriendInfo.current =
+        filteredFriend.length > 0 ? filteredFriend[0] : null;
+    }
   };
 
   const sortedFriends = useMemo(() => {
@@ -456,7 +469,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
               {/* 左侧：好友列表 */}
               <div className="w-[30%] border-r border-gray-200">
                 {/* 搜索框 */}
-                <SearchInput getFriendListApi={getFriendListApi} />
+                <SearchInput />
                 {userFriend.length > 0 && (
                   <div className="w-full overflow-y-auto h-full">
                     {sortedFriends.map((item) => {
@@ -525,69 +538,79 @@ const EADrawer: React.FC<EADrawerSchema> = ({
               </div>
 
               {/* 右侧：聊天内容 */}
-              {userChat.length > 0 || curFriendInfo.current ? (
-                <div
-                  className="flex flex-col flex-1 overflow-y-auto h-full drop-zone relative"
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragEnter={handleDragEnter}
-                  onDragLeave={handleDragLeave}
-                >
-                  {isDragOver && !shareChat && (
-                    <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
-                      <div className="absolute inset-0 bg-[var(--Ai-think-bg)]/60 backdrop-blur-sm flex items-center justify-center">
-                        <div className="text-center p-4">
-                          <div className="text-2xl mb-2">📤</div>
-                          <span className="text-blue-600 font-semibold text-lg">
-                            松开即可发送给好友
-                          </span>
-                          <div className="text-blue-500 text-sm mt-1">
-                            拖拽聊天记录到此处分享
+              {userChat.length > 0 ||
+              curFriendInfo.current ||
+              isSystem.current ? (
+                isSystem.current ? (
+                  <SystemMessage
+                    formatDate={formatDate}
+                    getFriendListApi={getFriendListApi}
+                  />
+                ) : (
+                  <div
+                    className="flex flex-col flex-1 overflow-y-auto h-full drop-zone relative"
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}
+                  >
+                    {isDragOver && !shareChat && (
+                      <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-[var(--Ai-think-bg)]/60 backdrop-blur-sm flex items-center justify-center">
+                          <div className="text-center p-4">
+                            <div className="text-2xl mb-2">📤</div>
+                            <span className="text-blue-600 font-semibold text-lg">
+                              松开即可发送给好友
+                            </span>
+                            <div className="text-blue-500 text-sm mt-1">
+                              拖拽聊天记录到此处分享
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {/* 聊天框 */}
-                  {userChat.length > 0 && (
-                    <div
-                      className={`w-full h-[80%] overflow-y-auto p-4 relative transition-all duration-200`}
-                      ref={chatListRef}
-                    >
-                      {userChat.map((item) => {
-                        const isMe = item.sender_id === userInfo?.id;
-                        return (
-                          <div
-                            key={item.id}
-                            ref={(el) => void (chatRefs.current[item.id] = el)}
-                            data-message-id={item.id}
-                            className={`chat ${
-                              isMe ? "chat-end" : "chat-start"
-                            }`}
-                          >
-                            <div className="chat-image avatar">
-                              <div className="w-10 rounded-full">
-                                <img
-                                  src={
-                                    isMe
-                                      ? userInfo?.avatar
-                                      : curFriendInfo.current?.friend.avatar
-                                  }
-                                />
+                    )}
+                    {/* 聊天框 */}
+                    {userChat.length > 0 && (
+                      <div
+                        className={`w-full h-[80%] overflow-y-auto p-4 relative transition-all duration-200`}
+                        ref={chatListRef}
+                      >
+                        {userChat.map((item) => {
+                          const isMe = item.sender_id === userInfo?.id;
+                          return (
+                            <div
+                              key={item.id}
+                              ref={(el) =>
+                                void (chatRefs.current[item.id] = el)
+                              }
+                              data-message-id={item.id}
+                              className={`chat ${
+                                isMe ? "chat-end" : "chat-start"
+                              }`}
+                            >
+                              <div className="chat-image avatar">
+                                <div className="w-10 rounded-full">
+                                  <img
+                                    src={
+                                      isMe
+                                        ? userInfo?.avatar
+                                        : curFriendInfo.current?.friend.avatar
+                                    }
+                                  />
+                                </div>
                               </div>
-                            </div>
-                            <div className="chat-header">
-                              {isMe
-                                ? userInfo.name
-                                : curFriendInfo.current?.friend.name}
-                              <time className="text-xs opacity-50">
-                                {formatDate(item.created_at)}
-                              </time>
-                            </div>
-                            <div className="chat-message flex flex-col gap-2 max-w-[70%]">
-                              {item.share_chat && (
-                                <div
-                                  className="
+                              <div className="chat-header">
+                                {isMe
+                                  ? userInfo.name
+                                  : curFriendInfo.current?.friend.name}
+                                <time className="text-xs opacity-50">
+                                  {formatDate(item.created_at)}
+                                </time>
+                              </div>
+                              <div className="chat-message flex flex-col gap-2 max-w-[70%]">
+                                {item.share_chat && (
+                                  <div
+                                    className="
                                     bg-base-200/60
                                     rounded-lg
                                     p-3
@@ -598,104 +621,108 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                                     hover:bg-base-200
                                     transition
                                   "
-                                  onClick={() => {
-                                    if (item.share_chat?.id && !isMe) {
-                                      allowShard(item);
-                                    }
-                                  }}
+                                    onClick={() => {
+                                      if (item.share_chat?.id && !isMe) {
+                                        allowShard(item);
+                                      }
+                                    }}
+                                  >
+                                    <div className="text-xs opacity-60 mb-1 flex items-center gap-1">
+                                      <span>🔗</span>
+                                      <span>分享的聊天</span>
+                                    </div>
+
+                                    <div className="font-medium line-clamp-1">
+                                      {item.share_chat.title}
+                                    </div>
+
+                                    <div className="text-xs opacity-60 mt-1">
+                                      点击查看完整内容
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div
+                                  className={`chat-bubble whitespace-pre-wrap ${isMe && "ml-[auto]"}`}
                                 >
-                                  <div className="text-xs opacity-60 mb-1 flex items-center gap-1">
-                                    <span>🔗</span>
-                                    <span>分享的聊天</span>
-                                  </div>
-
-                                  <div className="font-medium line-clamp-1">
-                                    {item.share_chat.title}
-                                  </div>
-
-                                  <div className="text-xs opacity-60 mt-1">
-                                    点击查看完整内容
-                                  </div>
+                                  {item.content}
                                 </div>
-                              )}
-
-                              <div
-                                className={`chat-bubble whitespace-pre-wrap ${isMe && "ml-[auto]"}`}
-                              >
-                                {item.content}
+                              </div>
+                              <div className="chat-footer opacity-50">
+                                {item.status === 0 ? "未读" : "已读"}
                               </div>
                             </div>
-                            <div className="chat-footer opacity-50">
-                              {item.status === 0 ? "未读" : "已读"}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {/* 输入框 */}
-                  <div className="w-full h-[20%] mt-[auto] border-t border-gray-200 overflow-y-auto">
-                    {shareChat && (
-                      <div className="px-4 py-2 border-t border-gray-200 bg-blue-50 rounded-lg mx-4 mt-2 relative">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="flex-shrink-0">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5 text-blue-500"
-                                viewBox="0 0 20 20"
-                                fill="currentColor"
-                              >
-                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                              </svg>
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">
-                                准备分享:
-                              </p>
-                              <p className="text-sm text-gray-500 truncate max-w-xs">
-                                {shareChat.title}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={handleCancelShare}
-                              className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                            >
-                              取消
-                            </button>
-                          </div>
-                        </div>
+                          );
+                        })}
                       </div>
                     )}
-                    <textarea
-                      className="textarea resize-none w-full !h-[100%] outline-none border-none focus:outline-none"
-                      placeholder="请输入内容"
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if ((e.ctrlKey || e.shiftKey) && e.key === "Enter") {
-                          setInputValue((prevValue) => prevValue + "\n");
-                          e.preventDefault();
-                        } else if (e.key === "Enter") {
-                          const content = inputValue.trim();
-                          if (content) {
-                            sendMessage();
-                            setInputValue("");
+                    {/* 输入框 */}
+                    <div className="w-full h-[20%] mt-[auto] border-t border-gray-200 overflow-y-auto">
+                      {shareChat && (
+                        <div className="px-4 py-2 border-t border-gray-200 bg-blue-50 rounded-lg mx-4 mt-2 relative">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="flex-shrink-0">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 text-blue-500"
+                                  viewBox="0 0 20 20"
+                                  fill="currentColor"
+                                >
+                                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  准备分享:
+                                </p>
+                                <p className="text-sm text-gray-500 truncate max-w-xs">
+                                  {shareChat.title}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={handleCancelShare}
+                                className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <textarea
+                        className="textarea resize-none w-full !h-[100%] outline-none border-none focus:outline-none"
+                        placeholder="请输入内容"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if ((e.ctrlKey || e.shiftKey) && e.key === "Enter") {
+                            setInputValue((prevValue) => prevValue + "\n");
+                            e.preventDefault();
+                          } else if (e.key === "Enter") {
+                            const content = inputValue.trim();
+                            if (content) {
+                              sendMessage();
+                              setInputValue("");
+                            }
+                            e.preventDefault();
                           }
-                          e.preventDefault();
-                        }
-                      }}
-                    ></textarea>
+                        }}
+                      ></textarea>
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <div className="w-[70%] flex justify-center items-center h-full aspect-square overflow-hidden rounded-lg">
-                  <img
-                    src={Logo}
-                    alt=""
-                    className="w-[50%] h-[30%] object-cover"
+                  <Lottie
+                    animationData={UserChatIcon}
+                    loop={true}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                    }}
                   />
                 </div>
               )}

@@ -37,6 +37,11 @@ export const uploadFile = (params: FormData) => {
   });
 };
 
+// 查询用户信息
+export const getUserInfoApi = (id: number) => {
+  return request.get(`/user/get_user/${id}`);
+};
+
 type UpdateUserSchemas = {
   name: string;
   email: string;

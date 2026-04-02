@@ -41,6 +41,7 @@ import { getFriendList } from "@/api/userFriend";
 import EALoader from "@/components/EALoader";
 import EAMessage from "@/components/EAMessage";
 import EAActionBar from "@/components/EAActionBar";
+import { getSystemInfoList } from "@/api/system_info";
 const { Content } = Layout;
 export interface ChatItem {
   id: number;
@@ -58,6 +59,9 @@ const Home: React.FC = () => {
   const { streamAIMessage } = useStreamAIMessage();
   const messages = useStore((state) => state.messages) ?? [];
   const unreadMsg = useStore((state) => state.unReadMsg);
+  const systemInfo = useStore((state) => state.systemInfo);
+  const unReadCount =
+    unreadMsg.length + systemInfo.filter((info) => info.is_read === 0).length;
   const actualTheme = useStore((state) => state.actualTheme);
   const userInfo = useStore((state) => state.user);
   const [chatList, setChatList] = useState<ChatItem[]>([]);
@@ -123,8 +127,6 @@ const Home: React.FC = () => {
   }, [hideLoading]);
 
   const getFriendListApi = async () => {
-    const res = await getFriendList();
-    updateUserFriend(res.data.data);
     const result = await getUnreadMessageList();
     if (result.data.success) {
       updateUnReadMsg(result.data.data);
@@ -132,6 +134,26 @@ const Home: React.FC = () => {
     const response = await getAllMessageList();
     if (response.data.success) {
       updateAllChatMsg(response.data.data);
+    }
+    const systemInfoRes = await getSystemInfoList();
+    if (systemInfoRes.data.success) {
+      useStore.setState({ systemInfo: systemInfoRes.data.data });
+    }
+    const res = await getFriendList();
+    if (systemInfoRes.data.data) {
+      updateUserFriend([
+        ...res.data.data,
+        {
+          id: "system",
+          status: 0,
+          created_at: (systemInfoRes.data.data ?? []).at(-1),
+          friend: {
+            id: "system",
+            name: "系统消息",
+            avatar: Logo,
+          },
+        },
+      ]);
     }
   };
 
@@ -327,7 +349,7 @@ const Home: React.FC = () => {
             />
             <EATheme />
             <div className="relative">
-              {unreadMsg.length > 0 && (
+              {unReadCount > 0 && (
                 <span
                   className="
                     absolute top-1/2 right-2 -translate-y-1/2
@@ -340,7 +362,7 @@ const Home: React.FC = () => {
                     shadow-sm
                   "
                 >
-                  {unreadMsg.length > 99 ? "99+" : unreadMsg.length}
+                  {unReadCount > 99 ? "99+" : unReadCount}
                 </span>
               )}
 
