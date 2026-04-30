@@ -15,13 +15,57 @@ const SystemMessage: React.FC<SystemMessageProps> = ({
 }) => {
   const socketRef = useStore((state) => state.socket);
   const systemInfo = useStore((state) => state.systemInfo);
-  const [userInfo, setUserInfo] = useState<User[] | []>([]);
+  const [userInfoMap, setUserInfoMap] = useState<Record<number, User>>({});
   const list = [...(systemInfo || [])].sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
   const unreadCount = list.filter((x) => x.is_read === 0).length;
   const systemListRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const sourceIds = Array.from(new Set(list.map((item) => item.source_id)));
+    const missingIds = sourceIds.filter((id) => !userInfoMap[id]);
+
+    if (missingIds.length === 0) {
+      return;
+    }
+
+    const fetchMissingUsers = async () => {
+      const fetchedUsers: User[] = [];
+
+      for (const id of missingIds) {
+        try {
+          const res = await getUserInfoApi(id);
+          if (res.data.success) {
+            fetchedUsers.push(res.data.data as User);
+          }
+        } catch (err) {
+          console.error("getUserInfoApi error:", err);
+        }
+      }
+
+      if (cancelled || fetchedUsers.length === 0) {
+        return;
+      }
+
+      setUserInfoMap((prev) => {
+        const next = { ...prev };
+        for (const user of fetchedUsers) {
+          next[user.id] = user;
+        }
+        return next;
+      });
+    };
+
+    void fetchMissingUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [list, userInfoMap]);
   // 接受好友请求
   const acceptFriendRequest = async (
     sysMsg: SystemInfoSchema,
@@ -40,19 +84,9 @@ const SystemMessage: React.FC<SystemMessageProps> = ({
     getFriendListApi();
   };
 
-  useEffect(() => {
-    systemInfo.map(async (item) => {
-      const res = await getUserInfoApi(item.source_id);
-      if (res.data.success) {
-        setUserInfo([...userInfo, res.data.data as User]);
-        console.log(res);
-      }
-    });
-  }, [systemInfo]);
-
   const renderSystemInfoItem = (info: SystemInfoSchema) => {
     const isUnread = info.is_read === 0;
-    const userInfoItem = userInfo.find((x) => x.id === info.source_id);
+    const userInfoItem = userInfoMap[info.source_id];
     return (
       <div
         key={info.id}
@@ -121,7 +155,7 @@ const SystemMessage: React.FC<SystemMessageProps> = ({
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {list.map(renderSystemInfoItem)}
+            {list.map((item) => renderSystemInfoItem(item))}
           </div>
         )}
       </div>

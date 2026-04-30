@@ -11,7 +11,7 @@ export function useStreamAIMessage() {
     tool_name?: string;
     type?: string;
     think_content?: string;
-  }>({ content: "" });
+  }>({ content: "", tool_name: "", think_content: "" });
 
   const aiMsgIdRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -72,7 +72,7 @@ export function useStreamAIMessage() {
             bufferRef.current.tool_content = chunk.tool_content;
             break;
           case "tool_name":
-            bufferRef.current.tool_name += chunk.tool_name;
+            bufferRef.current.tool_name = chunk.tool_name ?? "";
             break;
           default:
             console.warn("unknown chunk type", chunk);

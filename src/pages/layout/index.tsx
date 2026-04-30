@@ -7,6 +7,7 @@ import EAInput from "@/components/EAInput";
 import { useNavigate } from "react-router-dom";
 import EAMenu from "@/components/EAMenu/index";
 import EAMarkdown from "@/components/EAMarkdown/EAMarkdown";
+import { Wrench, Check, Loader2, Search, Code, Sun } from "lucide-react";
 import {
   addMessage,
   setMessages,
@@ -100,6 +101,12 @@ const Home: React.FC = () => {
     if (res.data.success) {
       setChatList(res.data.data.chat_list as ChatItem[]);
     }
+  };
+  // 获取工具图标
+  const getToolIcon = (name: string) => {
+    if (name.includes("web_search")) return <Search size={18} />;
+    if (name.includes("weather_query")) return <Sun size={18} />;
+    return <Wrench size={18} />;
   };
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -447,47 +454,77 @@ const Home: React.FC = () => {
                       </div>
                     )} */}
                     {/* 工具名称 */}
+
                     {item.tool_name && (
                       <div
-                        className="group relative flex items-center gap-3 p-4 my-2 w-[40%] rounded-2xl shadow-md 
-                                  bg-gradient-to-r from-[var(--Ai-content-bg)]/90 to-[var(--Ai-content-bg)]/60 
-                                  backdrop-blur-md border border-white/10 transition-all duration-300 
-                                  hover:scale-[1.02] hover:shadow-lg hover:border-primary/40 cursor-pointer"
+                        className="
+                          group relative flex items-center gap-4 p-4 my-3 w-[42%] rounded-2xl
+                          bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
+                          backdrop-blur-xl border border-white/10
+                          shadow-[0_8px_30px_rgba(0,0,0,0.12)]
+                          transition-all duration-300 cursor-pointer
+
+                          hover:shadow-[0_10px_40px_rgba(0,0,0,0.18)]
+                          hover:border-primary/40
+                          hover:-translate-y-[2px]
+                        "
                         onClick={() => {
                           toggleChat(false);
                           setCurrentMessage(item);
                         }}
                       >
-                        {/* 左侧图标区 */}
+                        {/* 左侧图标 */}
                         <div
-                          className="flex items-center justify-center w-10 h-10 rounded-xl 
-                                      bg-primary/20  text-lg"
+                          className="
+                            flex items-center justify-center w-11 h-11 rounded-xl
+                            bg-gradient-to-br from-primary/25 to-primary/5
+                            text-primary shadow-inner
+                          "
                         >
-                          🛠️
+                          {getToolIcon(item.tool_name)}
                         </div>
 
-                        {/* 内容区 */}
-                        <div className="flex flex-col text-[var(--Ai-content-text)] flex-1">
+                        {/* 内容 */}
+                        <div className="flex flex-col flex-1 text-[var(--Ai-content-text)]">
                           <div className="text-[15px] font-semibold tracking-wide">
                             {item.tool_name}
                           </div>
-                          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                            {item.finished ? "已完成" : "模型正在思考中"}
+
+                          <p
+                            className={`
+                              text-xs mt-1 flex items-center gap-1
+                              ${item.finished ? "text-green-400" : "text-yellow-400"}
+                            `}
+                          >
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
+                            {item.finished ? "已完成" : "模型思考中..."}
                           </p>
                         </div>
 
-                        {/* 右侧加载区 */}
+                        {/* 右侧状态 */}
                         <div className="ml-auto flex items-center">
                           {!item.finished ? (
-                            // 可以换成你喜欢的加载动画
-                            <div className="w-4 h-4 border-2 border-t-primary border-gray-200 rounded-full animate-spin"></div>
+                            <Loader2
+                              className="animate-spin text-primary"
+                              size={18}
+                            />
                           ) : (
-                            // 加载完成显示 ✓ 或其他图标
-                            <div className="text-green-500 font-bold text-lg">
-                              ✓
-                            </div>
+                            <Check
+                              className="text-green-400"
+                              size={18}
+                              strokeWidth={3}
+                            />
                           )}
                         </div>
+
+                        {/* hover 光效 */}
+                        <div
+                          className="
+                            absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100
+                            bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_70%)]
+                            transition-opacity duration-300
+                          "
+                        />
                       </div>
                     )}
                     {/* 主要内容 */}

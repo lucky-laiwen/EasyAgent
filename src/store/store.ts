@@ -216,7 +216,7 @@ export function updateMessage({
         }
       }
 
-      if (tool_name) {
+      if (tool_name && !item.tool_name) {
         item.tool_name = tool_name;
       }
 
