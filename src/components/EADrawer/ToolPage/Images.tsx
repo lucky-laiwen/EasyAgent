@@ -49,7 +49,7 @@ const Images = ({ imagesData }: ImagesProps) => {
           <img
             src={item.image}
             alt={item.title}
-            loading="lazy"
+            loading="eager"
             className="w-full h-auto object-cover"
             onError={() => handleImageError(item)}
           />

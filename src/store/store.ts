@@ -47,14 +47,23 @@ export interface ToolContentSchema {
   news: Array<WebSearchNewsSchema>;
 }
 
+// 工具调用结构
+export interface ToolCall {
+  id: number;
+  tool_name: string;
+  tool_content: ToolContentSchema | string | null | Array<WeatherSearchItem>;
+  tool_input: string;
+  status: number;
+  created_at: string;
+}
+
 // 聊天消息结构
 export interface ChatItem {
   id: number;
   sender: 0 | 1; // 0: 用户, 1: AI
   content: string;
   think_content?: string;
-  tool_content?: ToolContentSchema | string | null | Array<WeatherSearchItem>; // ✅ 支持字符串或数组
-  tool_name?: string;
+  tool_calls?: ToolCall[]; // 支持多个工具调用
   title?: string;
   type?: string;
   finished?: boolean;
@@ -193,15 +202,13 @@ export function updateMessage({
   id,
   content,
   finished,
-  tool_content,
-  tool_name,
+  tool_obj,
   think_content,
 }: {
   id: number;
   content?: string;
   finished?: boolean;
-  tool_content?: ToolContentSchema | string | null;
-  tool_name?: string;
+  tool_obj?: ToolCall;
   think_content?: string;
 }) {
   const message = useStore.getState().messages?.map((item) => {
@@ -216,21 +223,16 @@ export function updateMessage({
         }
       }
 
-      if (tool_name && !item.tool_name) {
-        item.tool_name = tool_name;
-      }
-
-      // 工具内容更新 ✅ 支持数组或字符串
-      if (tool_content) {
-        if (typeof tool_content === "string") {
-          // 是字符串就直接保存
-          item.tool_content = tool_content;
+      item.tool_calls?.map((toolCall) => {
+        if (toolCall.id === tool_obj?.id) {
+          toolCall.tool_content = tool_obj?.tool_content;
+          toolCall.tool_input = tool_obj?.tool_input;
+          toolCall.status = tool_obj?.status;
+          toolCall.created_at = tool_obj?.created_at;
         } else {
-          // 是数组则深拷贝保存
-          // item.tool_content = JSON.parse(JSON.stringify(tool_content));
-          item.tool_content = structuredClone(tool_content);
+          item.tool_calls?.push(tool_obj as ToolCall);
         }
-      }
+      });
 
       // 是否结束
       if (finished !== undefined) {
@@ -241,6 +243,44 @@ export function updateMessage({
   });
 
   useStore.setState({ messages: message });
+}
+
+// 更新工具调用内容
+export function updateToolCallContent({
+  toolCallId,
+  messageId,
+  toolContent,
+  status,
+  toolInput,
+}: {
+  messageId: number;
+  toolCallId: number;
+  toolContent?: ToolContentSchema | string | null;
+  status?: number;
+  toolInput?: string;
+}) {
+  const messages = useStore.getState().messages?.map((item) => {
+    if (item.id === messageId && item.tool_calls) {
+      const toolCall = item.tool_calls.find((call) => call.id === toolCallId);
+      if (toolCall) {
+        if (toolContent !== undefined) {
+          toolCall.tool_content =
+            typeof toolContent === "string"
+              ? toolContent
+              : structuredClone(toolContent);
+        }
+        if (status) {
+          toolCall.status = status;
+        }
+        if (toolInput) {
+          toolCall.tool_input = toolInput;
+        }
+      }
+    }
+    return item;
+  });
+
+  useStore.setState({ messages });
 }
 
 // 设置整个消息列表

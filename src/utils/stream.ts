@@ -7,11 +7,11 @@ export function useStreamAIMessage() {
   /* ---------- 1. 缓冲池 ---------- */
   const bufferRef = useRef<{
     content: string;
-    tool_content?: any;
-    tool_name?: string;
-    type?: string;
-    think_content?: string;
-  }>({ content: "", tool_name: "", think_content: "" });
+    think_content: string;
+  }>({ content: "", think_content: "" });
+
+  // 当前正在处理的工具调用 ID
+  const currentToolCallIdRef = useRef<string | null>(null);
 
   const aiMsgIdRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -23,7 +23,6 @@ export function useStreamAIMessage() {
 
     // 1. 生成全新对象
     const snapshot = {
-      ...bufferRef.current, // 展开旧字段
       content: bufferRef.current.content,
       think_content: bufferRef.current.think_content,
       id: aiMsgIdRef.current,
@@ -34,10 +33,8 @@ export function useStreamAIMessage() {
 
     // 3. 缓冲池也换成新对象，后续再改就不会污染旧快照
     bufferRef.current = {
-      ...bufferRef.current,
       content: "", // 只清正文
       think_content: "", // 只清思考内容
-      tool_name: "",
     };
   }, []);
 
@@ -68,17 +65,29 @@ export function useStreamAIMessage() {
           case "text":
             bufferRef.current.content += chunk.content ?? "";
             break;
-          case "tool_content":
-            bufferRef.current.tool_content = chunk.tool_content;
-            break;
           case "tool_name":
-            bufferRef.current.tool_name = chunk.tool_name ?? "";
+            // 工具调用开始 - 生成唯一的工具调用 ID
+            currentToolCallIdRef.current = `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            // 创建新的工具调用记录
+            updateMessage({
+              id: aiMessageId,
+              tool_obj: chunk.tool_name ?? "",
+            });
+            break;
+          case "tool_content":
+            // 工具内容更新
+            if (currentToolCallIdRef.current) {
+              updateMessage({
+                id: aiMessageId,
+                tool_obj: chunk.tool_content,
+              });
+            }
             break;
           default:
             console.warn("unknown chunk type", chunk);
             break;
         }
-        bufferRef.current.type = chunk.type;
 
         /* 5. 16 ms 内如果还有新 chunk 进来，就继续等 */
         if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -89,6 +98,9 @@ export function useStreamAIMessage() {
       if (timerRef.current) window.clearTimeout(timerRef.current);
       flush();
       updateMessage({ id: aiMessageId, finished: true });
+
+      // 重置工具调用 ID
+      currentToolCallIdRef.current = null;
     },
     [flush],
   );

@@ -5,6 +5,7 @@ import {
   type ToolContentSchema,
   type UserChatSchema,
   type WeatherSearchItem,
+  type ToolCall,
 } from "@/store/store";
 import { Empty } from "antd";
 import Weather from "./ToolPage/Weather";
@@ -56,6 +57,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 }) => {
   const chatOpen = useStore((state) => state.chatOpen);
   const [active, setActive] = useState("news"); // 当前高亮 tab
+  const [activeToolCallId, setActiveToolCallId] = useState<number | null>(null); // 当前选中的工具调用 ID
   const allMsg = useStore((state) => state.allChatMsg);
   const unreadMsg = useStore((state) => state.unReadMsg);
   const userInfo = useStore((state) => state.user);
@@ -72,6 +74,12 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   const newsRef = useRef<HTMLDivElement>(null);
   const textsRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    newsRef.current?.scrollTo(0, 0);
+    textsRef.current?.scrollTo(0, 0);
+    imagesRef.current?.scrollTo(0, 0);
+  }, [active]);
 
   useEffect(() => {
     if (!chatOpen) {
@@ -280,16 +288,17 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       return timeB - timeA;
     });
   }, [userFriend, allMsg]);
-  /** 只负责 Tool 内容 */
-  const renderToolContent = () => {
-    if (!message?.tool_content) return null;
 
-    if (message.tool_name === "web_search") {
-      const toolContent = message.tool_content as ToolContentSchema;
+  /** 渲染单个工具调用内容 */
+  const renderSingleToolContent = (toolCall: ToolCall) => {
+    if (!toolCall.tool_content) return null;
+
+    if (toolCall.tool_name === "web_search") {
+      const toolContent = toolCall.tool_content as ToolContentSchema;
       return (
-        <div className="relative w-full h-[95%] overflow-y-auto">
+        <div className="flex flex-col w-full h-[95%]">
           {/* 1. 固定栏 */}
-          <div className="sticky top-0 z-10 bg-base-100">
+          <div className="shrink-0 z-10 bg-base-100">
             <div className="tabs tabs-lift">
               {["news", "text", "image"].map((key) => (
                 <a
@@ -305,10 +314,11 @@ const EADrawer: React.FC<EADrawerSchema> = ({
             </div>
           </div>
 
-          {/* 2. 内容区 */}
-          <div className="pb-6 pt-2 px-2">
+          {/* 2. 内容区：flex-1 撑满剩余空间 */}
+          <div className="flex-1 min-h-0 relative overflow-y-auto">
             <div
               ref={newsRef}
+              className="px-2 pt-2 pb-6"
               style={{ display: active === "news" ? "block" : "none" }}
             >
               <News newsData={toolContent.news} />
@@ -316,6 +326,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
             <div
               ref={textsRef}
+              className="px-2 pt-2 pb-6"
               style={{ display: active === "text" ? "block" : "none" }}
             >
               <Texts TextsData={toolContent.text} />
@@ -323,21 +334,86 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
             <div
               ref={imagesRef}
+              className="px-2 pt-2 pb-6"
               style={{ display: active === "image" ? "block" : "none" }}
             >
               <Images imagesData={toolContent.imgs} />
             </div>
           </div>
+
+          {/* 图片预加载容器：不可见但在 DOM 中，触发浏览器提前加载图片 */}
+          <div className="absolute" style={{ left: "-9999px", top: "-9999px" }}>
+            {toolContent.imgs?.map((item, index) => (
+              <img key={index} src={item.image} alt="" loading="eager" />
+            ))}
+          </div>
         </div>
       );
     }
-    if (message.tool_name === "weather_query") {
+    if (toolCall.tool_name === "weather_query") {
       return (
         <div className="px-2 pb-[13%] h-full overflow-y-auto">
-          <Weather weatherData={message.tool_content as WeatherSearchItem[]} />
+          <Weather weatherData={toolCall.tool_content as WeatherSearchItem[]} />
         </div>
       );
     }
+    return null;
+  };
+
+  /** 只负责 Tool 内容 */
+  const renderToolContent = () => {
+    // 优先使用 tool_calls 数组
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      // 如果有多个工具调用，显示工具切换 tabs
+      if (message.tool_calls.length > 1) {
+        const currentToolCall =
+          message.tool_calls.find((call) => call.id === activeToolCallId) ||
+          message.tool_calls[0];
+
+        return (
+          <div className="flex flex-col w-full h-full">
+            {/* 工具调用切换栏 */}
+            <div className="shrink-0 z-10 bg-base-100 border-b border-gray-200">
+              <div className="tabs tabs-lift">
+                {message.tool_calls.map((toolCall) => (
+                  <a
+                    key={toolCall.id}
+                    className={`tab tab-lift ${
+                      currentToolCall.id === toolCall.id ? "tab-active" : ""
+                    }`}
+                    onClick={() => {
+                      setActiveToolCallId(toolCall.id);
+                      setActive("news"); // 重置子 tab
+                    }}
+                  >
+                    {getToolDisplayName(toolCall.tool_name)}
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* 工具内容 */}
+            <div className="flex-1 min-h-0">
+              {renderSingleToolContent(currentToolCall)}
+            </div>
+          </div>
+        );
+      }
+
+      // 单个工具调用
+      return renderSingleToolContent(message.tool_calls[0]);
+    }
+
+    return null;
+  };
+
+  /** 获取工具显示名称 */
+  const getToolDisplayName = (toolName: string) => {
+    const nameMap: Record<string, string> = {
+      web_search: "联网搜索",
+      weather_query: "天气查询",
+    };
+    return nameMap[toolName] || toolName;
   };
 
   // 在 EADrawer 组件内部添加拖放处理
@@ -434,7 +510,9 @@ const EADrawer: React.FC<EADrawerSchema> = ({
         ${
           message
             ? `w-[${
-                message.tool_name === "weather_query" ? "25%" : "35%"
+                message.tool_calls?.[0]?.tool_name === "weather_query"
+                  ? "25%"
+                  : "35%"
               }] !opacity-100`
             : chatOpen
               ? "w-[35%] !opacity-100"
@@ -446,7 +524,13 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       {/* Title */}
       <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
         <h3 className="text-lg font-bold">
-          {chatOpen ? "聊天" : (message?.tool_name ?? "")}
+          {chatOpen
+            ? "聊天"
+            : message?.tool_calls && message.tool_calls.length > 0
+              ? message.tool_calls.length > 1
+                ? `工具调用 (${message.tool_calls.length})`
+                : getToolDisplayName(message.tool_calls[0].tool_name)
+              : ""}
         </h3>
         <button
           className="text-lg font-bold cursor-pointer"
@@ -729,7 +813,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
             </div>
           )}
         </div>
-      ) : message?.tool_content ? (
+      ) : message?.tool_calls && message.tool_calls.length > 0 ? (
         renderToolContent()
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center">

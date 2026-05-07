@@ -17,6 +17,7 @@ import {
   toggleChat,
   updateUserFriend,
   type ChatItem as ChatItemStore,
+  type ToolCall,
   updateUnReadMsg,
   updateAllChatMsg,
   updatedSocket,
@@ -107,6 +108,34 @@ const Home: React.FC = () => {
     if (name.includes("web_search")) return <Search size={18} />;
     if (name.includes("weather_query")) return <Sun size={18} />;
     return <Wrench size={18} />;
+  };
+
+  // 获取工具显示名称
+  const getToolDisplayName = (toolName: string) => {
+    const nameMap: Record<string, string> = {
+      web_search: "联网搜索",
+      weather_query: "天气查询",
+    };
+    return nameMap[toolName] || toolName;
+  };
+
+  // 获取所有工具调用（包括新格式和旧格式）
+  const getToolCalls = (item: ChatItem): ToolCall[] => {
+    if (item.tool_calls && item.tool_calls.length > 0) {
+      return item.tool_calls;
+    }
+    // 兼容旧格式
+    if (item.tool_name) {
+      return [
+        {
+          id: "legacy",
+          tool_name: item.tool_name,
+          tool_content: item.tool_content,
+          status: (item.finished ? "success" : "pending") as "success" | "pending",
+        },
+      ];
+    }
+    return [];
   };
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -453,10 +482,11 @@ const Home: React.FC = () => {
                         />
                       </div>
                     )} */}
-                    {/* 工具名称 */}
+                    {/* 工具调用卡片 */}
 
-                    {item.tool_name && (
+                    {getToolCalls(item).map((toolCall) => (
                       <div
+                        key={toolCall.id}
                         className="
                           group relative flex items-center gap-4 p-4 my-3 w-[42%] rounded-2xl
                           bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
@@ -481,39 +511,51 @@ const Home: React.FC = () => {
                             text-primary shadow-inner
                           "
                         >
-                          {getToolIcon(item.tool_name)}
+                          {getToolIcon(toolCall.tool_name)}
                         </div>
 
                         {/* 内容 */}
                         <div className="flex flex-col flex-1 text-[var(--Ai-content-text)]">
                           <div className="text-[15px] font-semibold tracking-wide">
-                            {item.tool_name}
+                            {getToolDisplayName(toolCall.tool_name)}
                           </div>
 
                           <p
                             className={`
                               text-xs mt-1 flex items-center gap-1
-                              ${item.finished ? "text-green-400" : "text-yellow-400"}
+                              ${
+                                toolCall.status === "success"
+                                  ? "text-green-400"
+                                  : toolCall.status === "error"
+                                    ? "text-red-400"
+                                    : "text-yellow-400"
+                              }
                             `}
                           >
                             <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
-                            {item.finished ? "已完成" : "模型思考中..."}
+                            {toolCall.status === "success"
+                              ? "已完成"
+                              : toolCall.status === "error"
+                                ? "失败"
+                                : "模型思考中..."}
                           </p>
                         </div>
 
                         {/* 右侧状态 */}
                         <div className="ml-auto flex items-center">
-                          {!item.finished ? (
+                          {toolCall.status === "pending" ? (
                             <Loader2
                               className="animate-spin text-primary"
                               size={18}
                             />
-                          ) : (
+                          ) : toolCall.status === "success" ? (
                             <Check
                               className="text-green-400"
                               size={18}
                               strokeWidth={3}
                             />
+                          ) : (
+                            <span className="text-red-400 text-sm">✕</span>
                           )}
                         </div>
 
@@ -526,7 +568,7 @@ const Home: React.FC = () => {
                           "
                         />
                       </div>
-                    )}
+                    ))}
                     {/* 主要内容 */}
                     {item.content && (
                       <div
