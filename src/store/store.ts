@@ -181,9 +181,8 @@ export function setUser(user: User | null) {
 
 // 添加聊天记录
 export function addMessage(item: ChatItem) {
-  const message = useStore.getState().messages;
-  message?.push(item);
-  useStore.setState({ messages: message });
+  const messages = useStore.getState().messages;
+  useStore.setState({ messages: [...(messages || []), item] });
 }
 
 // 设置主题
@@ -211,73 +210,34 @@ export function updateMessage({
   tool_obj?: ToolCall;
   think_content?: string;
 }) {
-  const message = useStore.getState().messages?.map((item) => {
-    if (item.id === id) {
-      // 内容更新
-      if (content !== undefined) {
-        if (think_content) {
-          item.think_content = (item.think_content || "") + think_content;
-        }
-        if (content) {
-          item.content = (item.content || "") + content;
-        }
-      }
-
-      item.tool_calls?.map((toolCall) => {
-        if (toolCall.id === tool_obj?.id) {
-          toolCall.tool_content = tool_obj?.tool_content;
-          toolCall.tool_input = tool_obj?.tool_input;
-          toolCall.status = tool_obj?.status;
-          toolCall.created_at = tool_obj?.created_at;
-        } else {
-          item.tool_calls?.push(tool_obj as ToolCall);
-        }
-      });
-
-      // 是否结束
-      if (finished !== undefined) {
-        item.finished = finished;
-      }
-    }
-    return item;
-  });
-
-  useStore.setState({ messages: message });
-}
-
-// 更新工具调用内容
-export function updateToolCallContent({
-  toolCallId,
-  messageId,
-  toolContent,
-  status,
-  toolInput,
-}: {
-  messageId: number;
-  toolCallId: number;
-  toolContent?: ToolContentSchema | string | null;
-  status?: number;
-  toolInput?: string;
-}) {
   const messages = useStore.getState().messages?.map((item) => {
-    if (item.id === messageId && item.tool_calls) {
-      const toolCall = item.tool_calls.find((call) => call.id === toolCallId);
-      if (toolCall) {
-        if (toolContent !== undefined) {
-          toolCall.tool_content =
-            typeof toolContent === "string"
-              ? toolContent
-              : structuredClone(toolContent);
-        }
-        if (status) {
-          toolCall.status = status;
-        }
-        if (toolInput) {
-          toolCall.tool_input = toolInput;
-        }
+    if (item.id !== id) return item; // 未命中的直接返回原引用（不需要触发重渲染）
+
+    // 处理 tool_calls：存在则合并，不存在则追加
+    let newToolCalls = item.tool_calls;
+    if (tool_obj !== undefined) {
+      const exists = item.tool_calls?.some((tc) => tc.id === tool_obj.id);
+      if (exists) {
+        newToolCalls = item.tool_calls?.map((tc) =>
+          tc.id === tool_obj.id ? { ...tc, ...tool_obj } : tc,
+        );
+      } else {
+        newToolCalls = [...(item.tool_calls || []), tool_obj];
       }
     }
-    return item;
+
+    // 返回新对象，引用变化才能触发重渲染
+    return {
+      ...item,
+      ...(content !== undefined && {
+        content: (item.content || "") + content,
+        think_content: think_content
+          ? (item.think_content || "") + think_content
+          : item.think_content,
+      }),
+      ...(finished !== undefined && { finished }),
+      tool_calls: newToolCalls,
+    };
   });
 
   useStore.setState({ messages });

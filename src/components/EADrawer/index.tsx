@@ -75,6 +75,21 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   const textsRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef<HTMLDivElement>(null);
 
+  // 同步 activeToolCallId 与父组件传入的 message.tool_calls
+  useEffect(() => {
+    if (!message?.tool_calls || message.tool_calls.length <= 1) {
+      setActiveToolCallId(null);
+      return;
+    }
+    // 当前选中的工具调用仍然有效时，保持不变（动态更新内容）
+    const stillValid = message.tool_calls.some(
+      (call) => call.id === activeToolCallId,
+    );
+    if (!stillValid) {
+      setActiveToolCallId(message.tool_calls[0].id);
+    }
+  }, [message?.tool_calls]);
+
   useEffect(() => {
     newsRef.current?.scrollTo(0, 0);
     textsRef.current?.scrollTo(0, 0);
@@ -110,6 +125,9 @@ const EADrawer: React.FC<EADrawerSchema> = ({
             unReadMsg: state.unReadMsg.filter((item) => item.id !== data.id),
           }));
         } else if (data.type === "add_friend") {
+          useStore.setState((state) => ({
+            systemInfo: [...state.systemInfo, data],
+          }));
           getFriendListApi();
         } else if (data.type === "accept_friend_request") {
           getFriendListApi();
@@ -295,49 +313,65 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
     if (toolCall.tool_name === "web_search") {
       const toolContent = toolCall.tool_content as ToolContentSchema;
+      const tabGroupName = `web-search-tabs-${toolCall.id}`;
       return (
         <div className="flex flex-col w-full h-[95%]">
-          {/* 1. 固定栏 */}
-          <div className="shrink-0 z-10 bg-base-100">
-            <div className="tabs tabs-lift">
-              {["news", "text", "image"].map((key) => (
-                <a
-                  key={key}
-                  className={`tab tab-lift ${
-                    active === key ? "tab-active" : ""
-                  }`}
-                  onClick={() => setActive(key)}
-                >
-                  {key.charAt(0).toUpperCase() + key.slice(1)}
-                </a>
-              ))}
-            </div>
-          </div>
-
-          {/* 2. 内容区：flex-1 撑满剩余空间 */}
-          <div className="flex-1 min-h-0 relative overflow-y-auto">
+          <div role="tablist" className="tabs tabs-lift h-full mt-3">
+            <input
+              type="radio"
+              role="tab"
+              name={tabGroupName}
+              className="tab"
+              aria-label="News"
+              checked={active === "news"}
+              onChange={() => setActive("news")}
+            />
             <div
+              role="tabpanel"
               ref={newsRef}
-              className="px-2 pt-2 pb-6"
-              style={{ display: active === "news" ? "block" : "none" }}
+              className="tab-content bg-base-100 border-base-300 rounded-box p-2 min-h-0 overflow-y-auto"
             >
-              <News newsData={toolContent.news} />
+              <div className="pt-2 pb-6">
+                <News newsData={toolContent.news} />
+              </div>
             </div>
 
+            <input
+              type="radio"
+              role="tab"
+              name={tabGroupName}
+              className="tab"
+              aria-label="Text"
+              checked={active === "text"}
+              onChange={() => setActive("text")}
+            />
             <div
+              role="tabpanel"
               ref={textsRef}
-              className="px-2 pt-2 pb-6"
-              style={{ display: active === "text" ? "block" : "none" }}
+              className="tab-content bg-base-100 border-base-300 rounded-box p-2 min-h-0 overflow-y-auto"
             >
-              <Texts TextsData={toolContent.text} />
+              <div className="pt-2 pb-6">
+                <Texts TextsData={toolContent.text} />
+              </div>
             </div>
 
+            <input
+              type="radio"
+              role="tab"
+              name={tabGroupName}
+              className="tab"
+              aria-label="Image"
+              checked={active === "image"}
+              onChange={() => setActive("image")}
+            />
             <div
+              role="tabpanel"
               ref={imagesRef}
-              className="px-2 pt-2 pb-6"
-              style={{ display: active === "image" ? "block" : "none" }}
+              className="tab-content bg-base-100 border-base-300 rounded-box p-2 min-h-0 overflow-y-auto"
             >
-              <Images imagesData={toolContent.imgs} />
+              <div className="pt-2 pb-6">
+                <Images imagesData={toolContent.imgs} />
+              </div>
             </div>
           </div>
 
@@ -366,42 +400,51 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     if (message?.tool_calls && message.tool_calls.length > 0) {
       // 如果有多个工具调用，显示工具切换 tabs
       if (message.tool_calls.length > 1) {
-        const currentToolCall =
-          message.tool_calls.find((call) => call.id === activeToolCallId) ||
-          message.tool_calls[0];
+        const selectedToolCallId = message.tool_calls.some(
+          (call) => call.id === activeToolCallId,
+        )
+          ? activeToolCallId
+          : message.tool_calls[0].id;
+        const tabGroupName = `tool-calls-${message.id}`;
 
         return (
-          <div className="flex flex-col w-full h-full">
-            {/* 工具调用切换栏 */}
-            <div className="shrink-0 z-10 bg-base-100 border-b border-gray-200">
-              <div className="tabs tabs-lift">
-                {message.tool_calls.map((toolCall) => (
-                  <a
-                    key={toolCall.id}
-                    className={`tab tab-lift ${
-                      currentToolCall.id === toolCall.id ? "tab-active" : ""
-                    }`}
-                    onClick={() => {
-                      setActiveToolCallId(toolCall.id);
-                      setActive("news"); // 重置子 tab
-                    }}
-                  >
-                    {getToolDisplayName(toolCall.tool_name)}
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* 工具内容 */}
-            <div className="flex-1 min-h-0">
-              {renderSingleToolContent(currentToolCall)}
-            </div>
+          <div role="tablist" className="tabs tabs-lift h-full">
+            {message.tool_calls.flatMap((toolCall) => [
+              <input
+                key={`tool-tab-${toolCall.id}`}
+                type="radio"
+                role="tab"
+                name={tabGroupName}
+                className="tab"
+                aria-label={getToolDisplayName(toolCall.tool_name)}
+                checked={selectedToolCallId === toolCall.id}
+                onChange={() => {
+                  setActiveToolCallId(toolCall.id);
+                  setActive("news"); // 重置子 tab
+                }}
+              />,
+              <div
+                key={`tool-panel-${toolCall.id}`}
+                role="tabpanel"
+                className="tab-content bg-base-100 border-base-300 rounded-box min-h-0 overflow-hidden"
+              >
+                <div className="h-full min-h-0 flex flex-col">
+                  {renderSingleToolContent(toolCall)}
+                </div>
+              </div>,
+            ])}
           </div>
         );
       }
 
       // 单个工具调用
-      return renderSingleToolContent(message.tool_calls[0]);
+      return (
+        <div className="flex flex-col h-full">
+          <div className="flex-1 min-h-0">
+            {renderSingleToolContent(message.tool_calls[0])}
+          </div>
+        </div>
+      );
     }
 
     return null;
@@ -509,11 +552,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
         h-full transition-all duration-300 ease-in-out
         ${
           message
-            ? `w-[${
-                message.tool_calls?.[0]?.tool_name === "weather_query"
-                  ? "25%"
-                  : "35%"
-              }] !opacity-100`
+            ? "w-[35%] !opacity-100"
             : chatOpen
               ? "w-[35%] !opacity-100"
               : "w-0 !opacity-0"

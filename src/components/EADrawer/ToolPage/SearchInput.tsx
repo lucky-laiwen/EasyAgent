@@ -20,6 +20,7 @@ interface SearchResult {
 }
 
 const SearchInput = () => {
+  const userInfo = useStore((state) => state.user);
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [searchResult, setSearchResult] = useState<SearchResult>();
@@ -68,7 +69,8 @@ const SearchInput = () => {
         JSON.stringify({
           to_user_id: id,
           type: "add_friend",
-          content: res.data.data,
+          recipient_data: res.data.data,
+          sender_data: userInfo,
         }),
       );
     }

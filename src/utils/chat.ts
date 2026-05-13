@@ -5,7 +5,7 @@ type SendMessageSchemas = {
 
 export async function* sendMessage(
   params: SendMessageSchemas,
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<Record<string, any>, void, unknown> {
   const res = await fetch("http://localhost:8000/chat/stream", {
     method: "POST",
     headers: {
@@ -15,6 +15,7 @@ export async function* sendMessage(
     body: JSON.stringify(params),
   });
 
+  if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
   if (!res.body) return;
 
   const reader = res.body.getReader();
@@ -30,14 +31,21 @@ export async function* sendMessage(
     buffer = lines.pop() || "";
 
     for (const line of lines) {
+      if (line.startsWith("event: error")) {
+        const errorLine = line.split("\n").find((l) => l.startsWith("data:"));
+        const errData = errorLine
+          ? JSON.parse(errorLine.replace(/^data:\s*/, ""))
+          : {};
+        throw new Error(errData.error || "Stream error");
+      }
+
+      if (line.startsWith("event: done") || line.trim() === "") {
+        return;
+      }
+
       if (line.startsWith("data:")) {
         const jsonStr = line.replace(/^data:\s*/, "");
-        const dataObj = JSON.parse(jsonStr);
-        if (dataObj) {
-          yield dataObj; // 用 yield 替代 onChunk 回调
-        }
-      } else {
-        return undefined; // 提前结束 generator
+        yield JSON.parse(jsonStr);
       }
     }
   }

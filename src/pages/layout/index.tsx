@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { Layout, Spin, message, Avatar, Upload } from "antd";
 import { getChatRecords, getChatContent, createChat } from "@/api/chat";
 import { type UploadRequestOption } from "rc-upload/lib/interface";
@@ -7,7 +7,7 @@ import EAInput from "@/components/EAInput";
 import { useNavigate } from "react-router-dom";
 import EAMenu from "@/components/EAMenu/index";
 import EAMarkdown from "@/components/EAMarkdown/EAMarkdown";
-import { Wrench, Check, Loader2, Search, Code, Sun } from "lucide-react";
+import { Wrench, Check, Loader2, Search, Sun } from "lucide-react";
 import {
   addMessage,
   setMessages,
@@ -17,7 +17,6 @@ import {
   toggleChat,
   updateUserFriend,
   type ChatItem as ChatItemStore,
-  type ToolCall,
   updateUnReadMsg,
   updateAllChatMsg,
   updatedSocket,
@@ -77,10 +76,18 @@ const Home: React.FC = () => {
   const hideLoading = useStore((store) => store.hideLoading);
   const showLoading = useStore((store) => store.showLoading);
   const [messagesApi] = message.useMessage();
-  const divRef = useRef<HTMLDivElement>(null);
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const [slideHide, setSlideHide] = useState(true);
-  const [currentMessage, setCurrentMessage] = useState<ChatItemStore>();
+  const [selectedMessageId, setSelectedMessageId] = useState<number | null>(
+    null,
+  );
+
+  // 从 messages 数组中派生当前选中的消息，流式更新时自动同步
+  const currentMessage = useMemo(
+    () => messages.find((m) => m.id === selectedMessageId),
+    [messages, selectedMessageId],
+  );
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userName, setUserName] = useState<string | undefined>(userInfo?.name);
   const [userEmail, setUserEmail] = useState<string | undefined>(
@@ -119,24 +126,26 @@ const Home: React.FC = () => {
     return nameMap[toolName] || toolName;
   };
 
-  // 获取所有工具调用（包括新格式和旧格式）
-  const getToolCalls = (item: ChatItem): ToolCall[] => {
-    if (item.tool_calls && item.tool_calls.length > 0) {
-      return item.tool_calls;
+  const getToolInputPreview = (toolInput: unknown) => {
+    if (toolInput === null || toolInput === undefined) return "无参数";
+
+    if (typeof toolInput === "string") {
+      const trimmed = toolInput.trim();
+      if (!trimmed) return "无参数";
+      try {
+        return JSON.stringify(JSON.parse(trimmed));
+      } catch {
+        return trimmed;
+      }
     }
-    // 兼容旧格式
-    if (item.tool_name) {
-      return [
-        {
-          id: "legacy",
-          tool_name: item.tool_name,
-          tool_content: item.tool_content,
-          status: (item.finished ? "success" : "pending") as "success" | "pending",
-        },
-      ];
+
+    try {
+      return JSON.stringify(toolInput);
+    } catch {
+      return String(toolInput);
     }
-    return [];
   };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       hideLoading();
@@ -182,7 +191,9 @@ const Home: React.FC = () => {
         {
           id: "system",
           status: 0,
-          created_at: (systemInfoRes.data.data ?? []).at(-1),
+          created_at:
+            (systemInfoRes.data.data ?? []).at(-1)?.created_at ??
+            new Date().toISOString(),
           friend: {
             id: "system",
             name: "系统消息",
@@ -200,9 +211,6 @@ const Home: React.FC = () => {
   // 当 message 更新时自动滚动
   useEffect(() => {
     if (isUserAtBottom) scrollToBottom();
-    if (messages[messages.length - 1]) {
-      setLoading(!messages[messages.length - 1].finished || false);
-    }
   }, [messages]);
   if (!localStorage.getItem("token")) {
     navigate("/login");
@@ -212,14 +220,32 @@ const Home: React.FC = () => {
   // 切换指定内容
   const handleChatClick = async (id: number) => {
     setPageLoading(true);
-    setCurrentMessage(undefined);
+    setSelectedMessageId(null);
     const res = await getChatContent(id);
     if (res.data.success) {
-      const messagesWithType = (res.data.data as ChatItem[]).map((item) => ({
-        ...item,
-        type: item.think_content ? "think" : "text",
-        finished: true,
-      }));
+      const safeParse = (val: unknown) => {
+        if (typeof val !== "string") return val;
+        const trimmed = val.trim();
+        if (!trimmed) return val;
+        try {
+          return JSON.parse(trimmed);
+        } catch {
+          return val;
+        }
+      };
+      const messagesWithType = (res.data.data as ChatItemStore[]).map(
+        (item) => ({
+          ...item,
+          type: item.think_content ? "think" : "text",
+          finished: true,
+          tool_calls: item.tool_calls?.map((tc) => ({
+            ...tc,
+            tool_content: safeParse(tc.tool_content),
+          })),
+        }),
+      );
+      console.log(messagesWithType);
+
       setSelectedMenuKey(id.toString());
       setMessages(messagesWithType);
       setCurrentChatId(id);
@@ -250,23 +276,27 @@ const Home: React.FC = () => {
     // 获取 chatId（如果没有就用时间戳）
     const chatId = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
     setTimeout(scrollToBottom, 30);
-    // 1. 创建聊天请求
-    if (!currentChatId) {
-      const result = await createChat({
-        id: chatId,
-        message: sendText,
-      });
-      if (result.data.success) {
-        const chatId = result.data.data.id;
-        setCurrentChatId(chatId);
-        setSelectedMenuKey(chatId.toString());
-        getHisttoryList();
+    try {
+      // 1. 创建聊天请求
+      if (!currentChatId) {
+        const result = await createChat({
+          id: chatId,
+          message: sendText,
+        });
+        if (result.data.success) {
+          const chatId = result.data.data.id;
+          setCurrentChatId(chatId);
+          setSelectedMenuKey(chatId.toString());
+          getHisttoryList();
 
-        await streamAIMessage(chatId, sendText);
+          await streamAIMessage(chatId, sendText);
+        }
+      } else {
+        getHisttoryList();
+        await streamAIMessage(currentChatId, sendText);
       }
-    } else {
-      getHisttoryList();
-      await streamAIMessage(currentChatId, sendText);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -352,7 +382,7 @@ const Home: React.FC = () => {
     setCurrentChatId(null);
     setSelectedMenuKey("");
     handleClose();
-    setCurrentMessage(undefined);
+    setSelectedMessageId(null);
   };
 
   return (
@@ -407,7 +437,7 @@ const Home: React.FC = () => {
                 onClick={() => {
                   toggleChat(true);
                   handleClose();
-                  setCurrentMessage(undefined);
+                  setSelectedMessageId(null);
                 }}
                 icon={
                   <img
@@ -448,10 +478,7 @@ const Home: React.FC = () => {
 
       <Layout className={`w-[auto]`}>
         <Spin spinning={pageLoading}>
-          <Content
-            ref={divRef}
-            className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative "
-          >
+          <Content className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative ">
             <div
               ref={messageContainerRef}
               className="overflow-y-auto w-[full] flex flex-col items-center gap-2"
@@ -484,71 +511,73 @@ const Home: React.FC = () => {
                     )} */}
                     {/* 工具调用卡片 */}
 
-                    {getToolCalls(item).map((toolCall) => (
+                    {item.tool_calls?.map((toolCall) => (
                       <div
                         key={toolCall.id}
-                        className="
-                          group relative flex items-center gap-4 p-4 my-3 w-[42%] rounded-2xl
+                        className={`
+                          group relative flex items-center gap-3 p-3 my-3 rounded-2xl w-full
                           bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
-                          backdrop-blur-xl border border-white/10
+                          border border-white/10
                           shadow-[0_8px_30px_rgba(0,0,0,0.12)]
                           transition-all duration-300 cursor-pointer
-
                           hover:shadow-[0_10px_40px_rgba(0,0,0,0.18)]
                           hover:border-primary/40
-                          hover:-translate-y-[2px]
-                        "
+                        `}
                         onClick={() => {
                           toggleChat(false);
-                          setCurrentMessage(item);
+                          setSelectedMessageId(item.id);
                         }}
                       >
                         {/* 左侧图标 */}
                         <div
                           className="
-                            flex items-center justify-center w-11 h-11 rounded-xl
+                            flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl
                             bg-gradient-to-br from-primary/25 to-primary/5
-                            text-primary shadow-inner
+                            text-primary
                           "
                         >
                           {getToolIcon(toolCall.tool_name)}
                         </div>
 
                         {/* 内容 */}
-                        <div className="flex flex-col flex-1 text-[var(--Ai-content-text)]">
-                          <div className="text-[15px] font-semibold tracking-wide">
-                            {getToolDisplayName(toolCall.tool_name)}
+                        <div className="flex-1 min-w-0 text-[var(--Ai-content-text)]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold tracking-wide truncate">
+                              {getToolDisplayName(toolCall.tool_name)}
+                            </span>
+                            <span
+                              className={`
+                                flex-shrink-0 flex items-center gap-1 text-[11px]
+                                ${
+                                  toolCall.status === 1
+                                    ? "text-green-400"
+                                    : toolCall.status === 0
+                                      ? "text-red-400"
+                                      : "text-yellow-400"
+                                }
+                              `}
+                            >
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
+                              {toolCall.status === 1
+                                ? "已完成"
+                                : toolCall.status === 0
+                                  ? "失败"
+                                  : "思考中"}
+                            </span>
                           </div>
-
-                          <p
-                            className={`
-                              text-xs mt-1 flex items-center gap-1
-                              ${
-                                toolCall.status === "success"
-                                  ? "text-green-400"
-                                  : toolCall.status === "error"
-                                    ? "text-red-400"
-                                    : "text-yellow-400"
-                              }
-                            `}
-                          >
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
-                            {toolCall.status === "success"
-                              ? "已完成"
-                              : toolCall.status === "error"
-                                ? "失败"
-                                : "模型思考中..."}
+                          <p className="text-xs mt-0.5 text-[var(--Ai-think-text)] truncate">
+                            {getToolInputPreview(toolCall.tool_input)}
                           </p>
                         </div>
 
                         {/* 右侧状态 */}
-                        <div className="ml-auto flex items-center">
-                          {toolCall.status === "pending" ? (
+                        <div className="flex-shrink-0 flex items-center">
+                          {toolCall.status === 2 ? (
                             <Loader2
                               className="animate-spin text-primary"
                               size={18}
                             />
-                          ) : toolCall.status === "success" ? (
+                          ) : toolCall.status === 1 ? (
                             <Check
                               className="text-green-400"
                               size={18}
@@ -564,7 +593,7 @@ const Home: React.FC = () => {
                           className="
                             absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100
                             bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_70%)]
-                            transition-opacity duration-300
+                            transition-opacity duration-300 pointer-events-none
                           "
                         />
                       </div>
@@ -644,7 +673,7 @@ const Home: React.FC = () => {
         message={currentMessage}
         handleClose={() => {
           updateUserChat([]);
-          setCurrentMessage(undefined);
+          setSelectedMessageId(null);
           toggleChat(false);
         }}
         getFriendListApi={getFriendListApi}

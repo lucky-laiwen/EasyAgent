@@ -10,9 +10,6 @@ export function useStreamAIMessage() {
     think_content: string;
   }>({ content: "", think_content: "" });
 
-  // 当前正在处理的工具调用 ID
-  const currentToolCallIdRef = useRef<string | null>(null);
-
   const aiMsgIdRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
 
@@ -66,23 +63,22 @@ export function useStreamAIMessage() {
             bufferRef.current.content += chunk.content ?? "";
             break;
           case "tool_name":
-            // 工具调用开始 - 生成唯一的工具调用 ID
-            currentToolCallIdRef.current = `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-            // 创建新的工具调用记录
+            // 创建新的工具调用记录（chunk.tool_name 已经是完整的 ToolCall 对象）
             updateMessage({
               id: aiMessageId,
-              tool_obj: chunk.tool_name ?? "",
+              tool_obj: chunk.tool_name,
             });
             break;
           case "tool_content":
-            // 工具内容更新
-            if (currentToolCallIdRef.current) {
-              updateMessage({
-                id: aiMessageId,
-                tool_obj: chunk.tool_content,
-              });
-            }
+            // 工具内容更新（chunk.tool_content 也是完整的 ToolCall，tool_content 字段需先解析）
+            const tool_content = chunk.tool_content;
+            updateMessage({
+              id: aiMessageId,
+              tool_obj: {
+                ...tool_content,
+                tool_content: JSON.parse(tool_content.tool_content),
+              },
+            });
             break;
           default:
             console.warn("unknown chunk type", chunk);
@@ -98,9 +94,6 @@ export function useStreamAIMessage() {
       if (timerRef.current) window.clearTimeout(timerRef.current);
       flush();
       updateMessage({ id: aiMessageId, finished: true });
-
-      // 重置工具调用 ID
-      currentToolCallIdRef.current = null;
     },
     [flush],
   );
