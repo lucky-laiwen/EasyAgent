@@ -501,14 +501,14 @@ const Home: React.FC = () => {
                     }`}
                   >
                     {/* 思考内容 */}
-                    {/* {item.think_content && (
+                    {item.think_content && (
                       <div className="px-3  w-[100%] py-2 rounded-lg rounded-bl-none rounded-br-none mt-2 bg-[var(--Ai-think-bg)] text-[var(--Ai-think-text)]">
                         <EAMarkdown
                           content={item.think_content}
                           isFinished={item.finished}
                         />
                       </div>
-                    )} */}
+                    )}
                     {/* 工具调用卡片 */}
 
                     {item.tool_calls?.map((toolCall) => (

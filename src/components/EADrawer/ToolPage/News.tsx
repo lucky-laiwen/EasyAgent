@@ -41,7 +41,7 @@ const News = ({ newsData }: NewsProps) => {
               <div className="mt-auto flex items-center gap-2 text-xs text-[var(--Ai-think-text)]">
                 <span>{item.source}</span>
                 <span>·</span>
-                <span>{new Date(item.date).toISOString().split("T")[0]}</span>
+                <span>{item.date && !isNaN(new Date(item.date).getTime()) ? (() => { const d = new Date(item.date); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; })() : ""}</span>
               </div>
             </div>
           </div>
