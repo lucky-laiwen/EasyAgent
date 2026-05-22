@@ -25,6 +25,10 @@
   --scroll-thumb-hover: #94a3b8;
   --login-bg: #fff;
   --code-head: rgb(245, 245, 245);
+  --toggle-bg: rgb(242, 243, 245);
+  --toggle-slider: rgb(251, 251, 251);
+  --toggle-text-active: rgb(30, 31, 45);
+  --toggle-text-inactive: rgb(118, 119, 126);
 }
 
 /* 🌙 夜间模式（dark） */
@@ -50,6 +54,10 @@
   --scroll-thumb-hover: #555;
   --login-bg: rgb(29, 35, 42);
   --code-head: rgb(31, 31, 31);
+  --toggle-bg: rgb(26, 26, 26);
+  --toggle-slider: rgb(18, 18, 18);
+  --toggle-text-active: rgb(254, 254, 254);
+  --toggle-text-inactive: rgb(162, 162, 162);
 }
 html,
 body {

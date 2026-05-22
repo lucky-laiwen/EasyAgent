@@ -45,6 +45,7 @@
 .container_chat_bot .container-chat-options .chat .chat-bot {
   position: relative;
   display: flex;
+  flex-direction: column;
 }
 
 .container_chat_bot .chat .chat-bot textarea {
@@ -94,6 +95,7 @@
 
 .container_chat_bot .chat .options .btns-add {
   display: flex;
+  align-items: center;
   gap: 8px;
 
   & button {
@@ -177,7 +179,7 @@
     padding: 4px 8px;
     background-color: var(--chat-tag-bg);
     border: 1.5px solid var(--chat-tag-border);
-    border-radius: 10px;
+    border-radius: 6px;
     cursor: pointer;
     user-select: none;
   }

@@ -38,3 +38,19 @@ export function deleteChat(chat_id: number) {
 export function unShareChat(chat_id: number) {
   return request.get(`/chat/cancel_share/${chat_id}`);
 }
+
+// 上传聊天附件
+export interface UploadChatFileResponse {
+  file_id: number;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  file_url: string;
+  text_content?: string | null;
+}
+
+export function uploadChatFile(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request.post("/chat/upload_file", formData);
+}

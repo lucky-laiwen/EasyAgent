@@ -12,6 +12,7 @@ export function useStreamAIMessage() {
 
   const aiMsgIdRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   /* ---------- 2. 真正把缓冲写入全局 store ---------- */
 
@@ -43,60 +44,117 @@ export function useStreamAIMessage() {
   }, []);
 
   const streamAIMessage = useCallback(
-    async (chatId: number, message: string) => {
+    async (chatId: number, message: string, mode?: string, docIds?: number[], fileIds?: number[]) => {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       const aiMessageId = Date.now() + 1;
       aiMsgIdRef.current = aiMessageId;
 
       addMessage({ id: aiMessageId, sender: 1, content: "", finished: false });
 
-      for await (const chunk of sendMessage({
-        id: chatId,
-        message,
-      }) as AsyncIterable<any>) {
-        /* 4. 把 chunk 先扔进缓冲池，而不是立刻 updateMessage */
+      try {
+        for await (const chunk of sendMessage(
+          {
+            id: chatId,
+            message,
+            ...(mode && { mode }),
+            ...(docIds && docIds.length > 0 && { doc_ids: docIds }),
+            ...(fileIds && fileIds.length > 0 && { file_ids: fileIds }),
+          },
+          controller.signal,
+        ) as AsyncIterable<any>) {
+          // references 没有 type 字段，直接检查 references 字段
+          if (chunk.references) {
+            flush();
+            updateMessage({
+              id: aiMessageId,
+              rag_references: chunk.references,
+            });
+            continue;
+          }
 
-        switch (chunk.type) {
-          case "think":
-            bufferRef.current.think_content += chunk.content ?? "";
-            break;
-          case "text":
-            bufferRef.current.content += chunk.content ?? "";
-            break;
-          case "tool_name":
-            // 创建新的工具调用记录（chunk.tool_name 已经是完整的 ToolCall 对象）
-            updateMessage({
-              id: aiMessageId,
-              tool_obj: chunk.tool_name,
-            });
-            break;
-          case "tool_content":
-            // 工具内容更新（chunk.tool_content 也是完整的 ToolCall，tool_content 字段需先解析）
-            const tool_content = chunk.tool_content;
-            updateMessage({
-              id: aiMessageId,
-              tool_obj: {
-                ...tool_content,
-                tool_content: JSON.parse(tool_content.tool_content),
-              },
-            });
-            break;
-          default:
-            console.warn("unknown chunk type", chunk);
-            break;
+          switch (chunk.type) {
+            case "think":
+              bufferRef.current.think_content += chunk.content ?? "";
+              break;
+            case "text":
+              bufferRef.current.content += chunk.content ?? "";
+              break;
+            case "tool_name":
+              updateMessage({
+                id: aiMessageId,
+                tool_obj: chunk.tool_name,
+              });
+              break;
+            case "tool_content":
+              const tool_content = chunk.tool_content;
+              updateMessage({
+                id: aiMessageId,
+                tool_obj: {
+                  ...tool_content,
+                  tool_content: JSON.parse(tool_content.tool_content),
+                },
+              });
+              break;
+            case "outline":
+              flush();
+              updateMessage({
+                id: aiMessageId,
+                ppt_outline: chunk.slides,
+                ppt_style: chunk.style,
+                message_type: "ppt",
+              });
+              break;
+            case "slide_start":
+              flush();
+              updateMessage({
+                id: aiMessageId,
+                ppt_slide_index: chunk.index,
+                ppt_slide_html: "",
+                ppt_slide_status: "loading",
+              });
+              break;
+            case "slide_chunk":
+              updateMessage({
+                id: aiMessageId,
+                ppt_slide_index: chunk.index,
+                ppt_slide_html: chunk.content,
+              });
+              break;
+            case "slide_end":
+              flush();
+              updateMessage({
+                id: aiMessageId,
+                ppt_slide_index: chunk.index,
+                ppt_slide_status: "done",
+              });
+              break;
+            default:
+              console.warn("unknown chunk type", chunk);
+              break;
+          }
+
+          if (timerRef.current) window.clearTimeout(timerRef.current);
+          timerRef.current = window.setTimeout(flush, 16);
         }
-
-        /* 5. 16 ms 内如果还有新 chunk 进来，就继续等 */
+      } catch (e) {
+        if (!(e instanceof DOMException && e.name === "AbortError")) {
+          throw e;
+        }
+      } finally {
         if (timerRef.current) window.clearTimeout(timerRef.current);
-        timerRef.current = window.setTimeout(flush, 16);
+        flush();
+        updateMessage({ id: aiMessageId, finished: true });
+        abortControllerRef.current = null;
       }
-
-      /* 6. 流结束，把剩余内容一次性刷出去 */
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      flush();
-      updateMessage({ id: aiMessageId, finished: true });
     },
     [flush],
   );
 
-  return { streamAIMessage };
+  const stopStreaming = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
+  return { streamAIMessage, stopStreaming };
 }

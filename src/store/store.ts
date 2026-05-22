@@ -57,6 +57,17 @@ export interface ToolCall {
   created_at: string;
 }
 
+// PPT 幻灯片大纲
+export interface PptSlideOutline {
+  index: number;
+  title: string;
+  subtitle?: string;
+  description: string;
+  layout?: string;
+  points?: string[];
+  visualSuggestion?: string;
+}
+
 // 聊天消息结构
 export interface ChatItem {
   id: number;
@@ -66,7 +77,38 @@ export interface ChatItem {
   tool_calls?: ToolCall[]; // 支持多个工具调用
   title?: string;
   type?: string;
+  message_type?: "text" | "ppt";
   finished?: boolean;
+  ppt_outline?: PptSlideOutline[];
+  ppt_style?: {
+    theme?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    textColor?: string;
+    subtextColor?: string;
+    fontFamily?: string;
+    titleStyle?: string;
+    bodyStyle?: string;
+    cardStyle?: string;
+    backgroundCSS?: string;
+  };
+  ppt_slides?: Record<number, string>;
+  ppt_slide_status?: Record<number, "loading" | "done" | "error">;
+  rag_references?: Array<{
+    doc_id: number;
+    filename: string;
+    chunk_index?: number;
+    snippet?: string;
+    file_type?: string;
+  }>;
+  attachments?: Array<{
+    id: number;
+    filename: string;
+    file_type: string;
+    file_size: number;
+    file_url: string;
+    text_content?: string | null;
+  }>;
 }
 
 // 用户信息
@@ -203,15 +245,29 @@ export function updateMessage({
   finished,
   tool_obj,
   think_content,
+  ppt_outline,
+  ppt_style,
+  ppt_slide_html,
+  ppt_slide_index,
+  ppt_slide_status,
+  message_type,
+  rag_references,
 }: {
   id: number;
   content?: string;
   finished?: boolean;
   tool_obj?: ToolCall;
   think_content?: string;
+  ppt_outline?: PptSlideOutline[];
+  ppt_style?: ChatItem["ppt_style"];
+  ppt_slide_html?: string;
+  ppt_slide_index?: number;
+  ppt_slide_status?: "loading" | "done" | "error";
+  message_type?: "text" | "ppt";
+  rag_references?: ChatItem["rag_references"];
 }) {
   const messages = useStore.getState().messages?.map((item) => {
-    if (item.id !== id) return item; // 未命中的直接返回原引用（不需要触发重渲染）
+    if (item.id !== id) return item;
 
     // 处理 tool_calls：存在则合并，不存在则追加
     let newToolCalls = item.tool_calls;
@@ -226,7 +282,17 @@ export function updateMessage({
       }
     }
 
-    // 返回新对象，引用变化才能触发重渲染
+    // PPT slides 更新
+    let newSlides = item.ppt_slides;
+    let newSlideStatus = item.ppt_slide_status;
+    if (ppt_slide_index !== undefined && ppt_slide_html !== undefined) {
+      const existing = item.ppt_slides?.[ppt_slide_index] ?? "";
+      newSlides = { ...(item.ppt_slides || {}), [ppt_slide_index]: existing + ppt_slide_html };
+    }
+    if (ppt_slide_index !== undefined && ppt_slide_status !== undefined) {
+      newSlideStatus = { ...(item.ppt_slide_status || {}), [ppt_slide_index]: ppt_slide_status };
+    }
+
     return {
       ...item,
       ...(content !== undefined && {
@@ -236,7 +302,13 @@ export function updateMessage({
           : item.think_content,
       }),
       ...(finished !== undefined && { finished }),
+      ...(ppt_outline !== undefined && { ppt_outline }),
+      ...(ppt_style !== undefined && { ppt_style }),
+      ...(message_type !== undefined && { message_type }),
+      ...(rag_references !== undefined && { rag_references }),
       tool_calls: newToolCalls,
+      ppt_slides: newSlides,
+      ppt_slide_status: newSlideStatus,
     };
   });
 

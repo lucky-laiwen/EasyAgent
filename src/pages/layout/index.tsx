@@ -1,6 +1,17 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
-import { Layout, Spin, message, Avatar, Upload } from "antd";
-import { getChatRecords, getChatContent, createChat } from "@/api/chat";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
+import { Layout, Spin, message, Avatar, Upload, Image } from "antd";
+import {
+  getChatRecords,
+  getChatContent,
+  createChat,
+  uploadChatFile,
+} from "@/api/chat";
 import { type UploadRequestOption } from "rc-upload/lib/interface";
 import EAButton from "@/components/EAButton";
 import EAInput from "@/components/EAInput";
@@ -43,6 +54,9 @@ import EALoader from "@/components/EALoader";
 import EAMessage from "@/components/EAMessage";
 import EAActionBar from "@/components/EAActionBar";
 import { getSystemInfoList } from "@/api/system_info";
+import EAKnowledge from "@/components/EAKnowledge";
+import KnowledgeModal from "@/components/EAKnowledge/KnowledgeModal";
+import { getGlobalDocList, type DocItem } from "@/api/knowledge";
 const { Content } = Layout;
 export interface ChatItem {
   id: number;
@@ -57,7 +71,7 @@ export interface ChatItem {
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { streamAIMessage } = useStreamAIMessage();
+  const { streamAIMessage, stopStreaming } = useStreamAIMessage();
   const messages = useStore((state) => state.messages) ?? [];
   const unreadMsg = useStore((state) => state.unReadMsg);
   const systemInfo = useStore((state) => state.systemInfo);
@@ -78,9 +92,52 @@ const Home: React.FC = () => {
   const [messagesApi] = message.useMessage();
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const [slideHide, setSlideHide] = useState(true);
+  const [inputMode, setInputMode] = useState<string>("text");
   const [selectedMessageId, setSelectedMessageId] = useState<number | null>(
     null,
   );
+  const [selectedToolCallId, setSelectedToolCallId] = useState<number | null>(
+    null,
+  );
+  const [docList, setDocList] = useState<DocItem[]>([]);
+  const [selectedDocIds, setSelectedDocIds] = useState<number[]>([]);
+
+  // 文档列表更新时，清理已不存在的选中文档
+  useEffect(() => {
+    if (selectedDocIds.length === 0) return;
+    const validIds = docList.filter((d) => d.status === "completed").map((d) => d.id);
+    const filtered = selectedDocIds.filter((id) => validIds.includes(id));
+    if (filtered.length !== selectedDocIds.length) {
+      setSelectedDocIds(filtered);
+    }
+  }, [docList]);
+  const [uploadingFiles, setUploadingFiles] = useState<
+    { name: string; size: number }[]
+  >([]);
+  const [uploadedFiles, setUploadedFiles] = useState<
+    {
+      file_id: number;
+      filename: string;
+      file_type: string;
+      file_size: number;
+      file_url: string;
+      text_content?: string | null;
+    }[]
+  >([]);
+  const [fileModalOpen, setFileModalOpen] = useState(false);
+  const [fileModalContent, setFileModalContent] = useState<{
+    filename: string;
+    text_content: string;
+  } | null>(null);
+  const [knowledgeModalOpen, setKnowledgeModalOpen] = useState(false);
+  const [knowledgeModalDocId, setKnowledgeModalDocId] = useState<number | null>(
+    null,
+  );
+  const [knowledgeModalDocName, setKnowledgeModalDocName] = useState("");
+
+  // 全局拖拽上传
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // 从 messages 数组中派生当前选中的消息，流式更新时自动同步
   const currentMessage = useMemo(
@@ -152,6 +209,16 @@ const Home: React.FC = () => {
     }, 300);
     getHisttoryList();
 
+    // 阻止浏览器默认打开拖入的文件
+    const preventFileOpen = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("dragover", preventFileOpen);
+    window.addEventListener("drop", preventFileOpen);
+    getGlobalDocList().then((res) => {
+      if (res.data.success) setDocList(res.data.data);
+    });
+
     updatedSocket(createChatSocket(userInfo?.id as number));
     const container = messageContainerRef.current;
     if (!container) return;
@@ -167,6 +234,8 @@ const Home: React.FC = () => {
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("dragover", preventFileOpen);
+      window.removeEventListener("drop", preventFileOpen);
       clearTimeout(timer);
     };
   }, [hideLoading]);
@@ -221,6 +290,7 @@ const Home: React.FC = () => {
   const handleChatClick = async (id: number) => {
     setPageLoading(true);
     setSelectedMessageId(null);
+    setSelectedToolCallId(null);
     const res = await getChatContent(id);
     if (res.data.success) {
       const safeParse = (val: unknown) => {
@@ -234,15 +304,22 @@ const Home: React.FC = () => {
         }
       };
       const messagesWithType = (res.data.data as ChatItemStore[]).map(
-        (item) => ({
-          ...item,
-          type: item.think_content ? "think" : "text",
-          finished: true,
-          tool_calls: item.tool_calls?.map((tc) => ({
-            ...tc,
-            tool_content: safeParse(tc.tool_content),
-          })),
-        }),
+        (item) => {
+          const base = {
+            ...item,
+            type: item.think_content ? "think" : "text",
+            finished: true,
+            tool_calls: item.tool_calls?.map((tc) => ({
+              ...tc,
+              tool_content: safeParse(tc.tool_content),
+            })),
+          };
+          // PPT 历史消息保留 message_type
+          if ((item as any).message_type === "ppt") {
+            (base as any).message_type = "ppt";
+          }
+          return base;
+        },
       );
       console.log(messagesWithType);
 
@@ -258,11 +335,98 @@ const Home: React.FC = () => {
     }
   };
 
+  // 拖入/选择文件后立即上传
+  const handleFilesAdd = useCallback(
+    async (files: File[]) => {
+      // 去重：跳过已上传或正在上传的文件
+      const existing = [
+        ...uploadingFiles,
+        ...uploadedFiles.map((f) => ({ name: f.filename, size: f.file_size })),
+      ];
+      const newFiles = files.filter(
+        (f) => !existing.some((e) => e.name === f.name && e.size === f.size),
+      );
+      if (newFiles.length === 0) return;
+
+      // 标记为上传中
+      const uploading = newFiles.map((f) => ({ name: f.name, size: f.size }));
+      setUploadingFiles((prev) => [...prev, ...uploading]);
+
+      // 逐个上传
+      for (const file of newFiles) {
+        try {
+          const res = await uploadChatFile(file);
+          if (res.data.success) {
+            setUploadedFiles((prev) => [...prev, res.data.data]);
+          } else {
+            EAMessage.error(`${file.name} 上传失败`);
+          }
+        } catch {
+          EAMessage.error(`${file.name} 上传失败`);
+        } finally {
+          setUploadingFiles((prev) =>
+            prev.filter((f) => !(f.name === file.name && f.size === file.size)),
+          );
+        }
+      }
+    },
+    [uploadingFiles, uploadedFiles],
+  );
+
+  // 删除已上传的文件
+  const handleFileRemove = useCallback((fileId: number) => {
+    setUploadedFiles((prev) => prev.filter((f) => f.file_id !== fileId));
+  }, []);
+
+  const refreshDocList = useCallback(() => {
+    getGlobalDocList().then((res) => {
+      if (res.data.success) setDocList(res.data.data);
+    });
+  }, []);
+
+  // 全局拖拽上传
+  const handlePageDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handlePageDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  const handlePageDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handlePageDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      dragCounterRef.current = 0;
+      if (e.dataTransfer.files.length > 0) {
+        handleFilesAdd(Array.from(e.dataTransfer.files));
+      }
+    },
+    [handleFilesAdd],
+  );
+
   // 发送消息（流式接收）
   const handleSend = async () => {
     if (!inputValue.trim()) return;
     const sendText = inputValue;
+    const sendMode = inputMode;
+    const sendDocIds = selectedDocIds;
+    const sendFileIds = uploadedFiles.map((f) => f.file_id);
     setInputValue("");
+    setSelectedDocIds([]);
+    setUploadedFiles([]);
     setLoading(true);
 
     // 插入用户信息
@@ -271,6 +435,39 @@ const Home: React.FC = () => {
       sender: 0,
       content: sendText,
       finished: true,
+      rag_references:
+        sendDocIds.length > 0
+          ? sendDocIds
+              .map((docId) => {
+                const doc = docList.find((item) => item.id === docId);
+                if (!doc) return null;
+                return {
+                  doc_id: doc.id,
+                  filename: doc.filename,
+                  file_type: doc.file_type,
+                };
+              })
+              .filter(
+                (
+                  ref,
+                ): ref is {
+                  doc_id: number;
+                  filename: string;
+                  file_type: string;
+                } => ref !== null,
+              )
+          : undefined,
+      attachments:
+        uploadedFiles.length > 0
+          ? uploadedFiles.map((f) => ({
+              id: f.file_id,
+              filename: f.filename,
+              file_type: f.file_type,
+              file_size: f.file_size,
+              file_url: f.file_url,
+              text_content: f.text_content,
+            }))
+          : undefined,
     });
 
     // 获取 chatId（如果没有就用时间戳）
@@ -289,11 +486,23 @@ const Home: React.FC = () => {
           setSelectedMenuKey(chatId.toString());
           getHisttoryList();
 
-          await streamAIMessage(chatId, sendText);
+          await streamAIMessage(
+            chatId,
+            sendText,
+            sendMode,
+            sendDocIds,
+            sendFileIds,
+          );
         }
       } else {
         getHisttoryList();
-        await streamAIMessage(currentChatId, sendText);
+        await streamAIMessage(
+          currentChatId,
+          sendText,
+          sendMode,
+          sendDocIds,
+          sendFileIds,
+        );
       }
     } finally {
       setLoading(false);
@@ -383,6 +592,14 @@ const Home: React.FC = () => {
     setSelectedMenuKey("");
     handleClose();
     setSelectedMessageId(null);
+    setSelectedToolCallId(null);
+    setInputMode("text");
+  };
+
+  const handleOpenKnowledgeModal = (docId: number, docName: string) => {
+    setKnowledgeModalDocId(docId);
+    setKnowledgeModalDocName(docName);
+    setKnowledgeModalOpen(true);
   };
 
   return (
@@ -414,6 +631,7 @@ const Home: React.FC = () => {
               className="flex justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
             />
             <EATheme />
+            <EAKnowledge onDocListChange={refreshDocList} />
             <div className="relative">
               {unReadCount > 0 && (
                 <span
@@ -438,6 +656,7 @@ const Home: React.FC = () => {
                   toggleChat(true);
                   handleClose();
                   setSelectedMessageId(null);
+                  setSelectedToolCallId(null);
                 }}
                 icon={
                   <img
@@ -478,7 +697,32 @@ const Home: React.FC = () => {
 
       <Layout className={`w-[auto]`}>
         <Spin spinning={pageLoading}>
-          <Content className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative ">
+          <Content
+            className="flex flex-col p-6 justify-between h-screen overflow-auto bg-base-200 relative"
+            onDragEnter={handlePageDragEnter}
+            onDragLeave={handlePageDragLeave}
+            onDragOver={handlePageDragOver}
+            onDrop={handlePageDrop}
+          >
+            {isDragOver && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+                style={{
+                  backgroundColor: "var(--Ai-think-bg)",
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-2">📎</div>
+                  <span
+                    className="text-lg font-medium"
+                    style={{ color: "var(--chat-text)" }}
+                  >
+                    松开即可上传文件
+                  </span>
+                </div>
+              </div>
+            )}
             <div
               ref={messageContainerRef}
               className="overflow-y-auto w-[full] flex flex-col items-center gap-2"
@@ -511,10 +755,12 @@ const Home: React.FC = () => {
                     )}
                     {/* 工具调用卡片 */}
 
-                    {item.tool_calls?.map((toolCall) => (
-                      <div
-                        key={toolCall.id}
-                        className={`
+                    {item.tool_calls
+                      ?.filter((tc) => tc.tool_name !== "ppt")
+                      .map((toolCall) => (
+                        <div
+                          key={toolCall.id}
+                          className={`
                           group relative flex items-center gap-3 p-3 my-3 rounded-2xl w-full
                           bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
                           border border-white/10
@@ -523,30 +769,31 @@ const Home: React.FC = () => {
                           hover:shadow-[0_10px_40px_rgba(0,0,0,0.18)]
                           hover:border-primary/40
                         `}
-                        onClick={() => {
-                          toggleChat(false);
-                          setSelectedMessageId(item.id);
-                        }}
-                      >
-                        {/* 左侧图标 */}
-                        <div
-                          className="
+                          onClick={() => {
+                            toggleChat(false);
+                            setSelectedMessageId(item.id);
+                            setSelectedToolCallId(toolCall.id);
+                          }}
+                        >
+                          {/* 左侧图标 */}
+                          <div
+                            className="
                             flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl
                             bg-gradient-to-br from-primary/25 to-primary/5
                             text-primary
                           "
-                        >
-                          {getToolIcon(toolCall.tool_name)}
-                        </div>
+                          >
+                            {getToolIcon(toolCall.tool_name)}
+                          </div>
 
-                        {/* 内容 */}
-                        <div className="flex-1 min-w-0 text-[var(--Ai-content-text)]">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold tracking-wide truncate">
-                              {getToolDisplayName(toolCall.tool_name)}
-                            </span>
-                            <span
-                              className={`
+                          {/* 内容 */}
+                          <div className="flex-1 min-w-0 text-[var(--Ai-content-text)]">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold tracking-wide truncate">
+                                {getToolDisplayName(toolCall.tool_name)}
+                              </span>
+                              <span
+                                className={`
                                 flex-shrink-0 flex items-center gap-1 text-[11px]
                                 ${
                                   toolCall.status === 1
@@ -556,49 +803,191 @@ const Home: React.FC = () => {
                                       : "text-yellow-400"
                                 }
                               `}
-                            >
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
-                              {toolCall.status === 1
-                                ? "已完成"
-                                : toolCall.status === 0
-                                  ? "失败"
-                                  : "思考中"}
-                            </span>
+                              >
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
+                                {toolCall.status === 1
+                                  ? "已完成"
+                                  : toolCall.status === 0
+                                    ? "失败"
+                                    : "思考中"}
+                              </span>
+                            </div>
+                            <p className="text-xs mt-0.5 text-[var(--Ai-think-text)] truncate">
+                              {getToolInputPreview(toolCall.tool_input)}
+                            </p>
                           </div>
-                          <p className="text-xs mt-0.5 text-[var(--Ai-think-text)] truncate">
-                            {getToolInputPreview(toolCall.tool_input)}
-                          </p>
-                        </div>
 
-                        {/* 右侧状态 */}
-                        <div className="flex-shrink-0 flex items-center">
-                          {toolCall.status === 2 ? (
-                            <Loader2
-                              className="animate-spin text-primary"
-                              size={18}
-                            />
-                          ) : toolCall.status === 1 ? (
-                            <Check
-                              className="text-green-400"
-                              size={18}
-                              strokeWidth={3}
-                            />
-                          ) : (
-                            <span className="text-red-400 text-sm">✕</span>
-                          )}
-                        </div>
+                          {/* 右侧状态 */}
+                          <div className="flex-shrink-0 flex items-center">
+                            {toolCall.status === 2 ? (
+                              <Loader2
+                                className="animate-spin text-primary"
+                                size={18}
+                              />
+                            ) : toolCall.status === 1 ? (
+                              <Check
+                                className="text-green-400"
+                                size={18}
+                                strokeWidth={3}
+                              />
+                            ) : (
+                              <span className="text-red-400 text-sm">✕</span>
+                            )}
+                          </div>
 
-                        {/* hover 光效 */}
-                        <div
-                          className="
+                          {/* hover 光效 */}
+                          <div
+                            className="
                             absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100
                             bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_70%)]
                             transition-opacity duration-300 pointer-events-none
                           "
-                        />
+                          />
+                        </div>
+                      ))}
+                    {/* PPT 大纲卡片 */}
+                    {(item.ppt_outline ||
+                      (item as any).message_type === "ppt") && (
+                      <div
+                        onClick={() => {
+                          toggleChat(false);
+                          setSelectedMessageId(item.id);
+                          setSelectedToolCallId(null);
+                        }}
+                        className="group relative flex flex-col gap-2 p-4 my-2 rounded-2xl w-full cursor-pointer
+                          bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]
+                          border border-white/10
+                          shadow-[0_8px_30px_rgba(0,0,0,0.12)]
+                          transition-all duration-300
+                          hover:shadow-[0_10px_40px_rgba(0,0,0,0.18)]
+                          hover:border-primary/40"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary/25 to-primary/5 text-primary">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M2 3h20" />
+                              <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+                              <path d="m7 21 5-5 5 5" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-semibold text-[var(--Ai-content-text)]">
+                              PPT 演示
+                            </span>
+                            {item.ppt_outline && (
+                              <span className="text-xs text-[var(--Ai-think-text)] ml-2">
+                                {item.ppt_outline.length} 页幻灯片
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-shrink-0 flex items-center">
+                            {item.ppt_slide_status &&
+                            Object.values(item.ppt_slide_status).every(
+                              (s) => s === "done",
+                            ) ? (
+                              <Check
+                                className="text-green-400"
+                                size={18}
+                                strokeWidth={3}
+                              />
+                            ) : item.ppt_slide_status &&
+                              Object.values(item.ppt_slide_status).some(
+                                (s) => s === "loading",
+                              ) ? (
+                              <Loader2
+                                className="animate-spin text-primary"
+                                size={18}
+                              />
+                            ) : (
+                              <span className="text-xs text-[var(--Ai-think-text)]">
+                                准备就绪
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {item.ppt_outline && (
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {item.ppt_outline.slice(0, 5).map((s) => (
+                              <span
+                                key={s.index}
+                                className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-[var(--Ai-think-text)]"
+                              >
+                                {s.title}
+                              </span>
+                            ))}
+                            {item.ppt_outline.length > 5 && (
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-[var(--Ai-think-text)]">
+                                +{item.ppt_outline.length - 5}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_70%)] transition-opacity duration-300 pointer-events-none" />
                       </div>
-                    ))}
+                    )}
+
                     {/* 主要内容 */}
+                    {item.rag_references && item.rag_references.length > 0 && (
+                      <div className="w-full mb-2">
+                        <div
+                          className={`text-[12px] text-[var(--Ai-think-text)] mb-2 ${
+                            item.sender === 0 ? "text-right" : "text-left"
+                          }`}
+                        >
+                          参考知识库
+                        </div>
+                        <div
+                          className={`flex flex-wrap gap-2 ${
+                            item.sender === 0 ? "justify-end" : "justify-start"
+                          }`}
+                        >
+                          {item.rag_references.map((ref, index) => (
+                            <button
+                              key={`${ref.doc_id}-${ref.chunk_index ?? "na"}-${index}`}
+                              className="group flex items-center gap-2 px-2 py-1.5 rounded-xl text-left transition-opacity hover:opacity-80 cursor-pointer"
+                              style={{
+                                backgroundColor: "var(--chat-tag-bg)",
+                                border: "1.5px solid var(--chat-tag-border)",
+                              }}
+                              title={ref.snippet || ref.filename}
+                              onClick={() =>
+                                handleOpenKnowledgeModal(ref.doc_id, ref.filename)
+                              }
+                            >
+                              <div
+                                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold"
+                                style={{
+                                  backgroundColor: "var(--Ai-think-bg)",
+                                  color: "var(--chat-text)",
+                                }}
+                              >
+                                KB
+                              </div>
+                              <div className="flex flex-col min-w-0 leading-tight">
+                                <span className="text-[12px] text-[var(--chat-text)] truncate max-w-[220px]">
+                                  {ref.filename}
+                                </span>
+                                <span className="text-[11px] text-[var(--Ai-think-text)] truncate max-w-[220px]">
+                                  {ref.chunk_index !== undefined
+                                    ? `Chunk #${ref.chunk_index}`
+                                    : "知识库文档"}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {item.content && (
                       <div
                         className={`leading-8 ${
@@ -618,7 +1007,111 @@ const Home: React.FC = () => {
                           </div>
                         ) : (
                           <div className="group flex flex-col gap-2 items-end relative">
-                            <div className="text-[var(--Ai-content-text)] px-4 py-2 msx-w-[100%] rounded-lg  bg-[var(--Ai-content-bg)] text-sm font-normal whitespace-pre-wrap">
+                            {/* 附件展示 */}
+                            {item.attachments &&
+                              item.attachments.length > 0 && (
+                                <div className="flex flex-wrap gap-2 justify-end">
+                                  {item.attachments.map((att) => {
+                                    const isImage = [
+                                      "jpg",
+                                      "jpeg",
+                                      "png",
+                                      "webp",
+                                    ].includes(att.file_type.toLowerCase());
+                                    const formatSize = (bytes: number) => {
+                                      if (bytes < 1024) return `${bytes}B`;
+                                      if (bytes < 1024 * 1024)
+                                        return `${(bytes / 1024).toFixed(1)}KB`;
+                                      return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+                                    };
+                                    if (isImage) {
+                                      return (
+                                        <div
+                                          key={att.id}
+                                          className="rounded-xl overflow-hidden"
+                                          style={{
+                                            border:
+                                              "1.5px solid var(--chat-tag-border)",
+                                            maxWidth: 120,
+                                            maxHeight: 120,
+                                          }}
+                                        >
+                                          <Image
+                                            src={att.file_url}
+                                            alt={att.filename}
+                                            style={{
+                                              display: "block",
+                                              maxWidth: 120,
+                                              maxHeight: 120,
+                                              width: "auto",
+                                              height: "auto",
+                                              objectFit: "contain",
+                                            }}
+                                            preview={{ mask: null }}
+                                          />
+                                        </div>
+                                      );
+                                    }
+                                    const hasTextContent = !!att.text_content;
+                                    return (
+                                      <div
+                                        key={att.id}
+                                        className={`flex items-center gap-1.5 px-2 py-2 rounded-xl ${hasTextContent ? "cursor-pointer hover:opacity-80" : ""}`}
+                                        style={{
+                                          backgroundColor: "var(--chat-tag-bg)",
+                                          border:
+                                            "1.5px solid var(--chat-tag-border)",
+                                        }}
+                                        onClick={
+                                          hasTextContent
+                                            ? () => {
+                                                setFileModalContent({
+                                                  filename: att.filename,
+                                                  text_content:
+                                                    att.text_content!,
+                                                });
+                                                setFileModalOpen(true);
+                                              }
+                                            : undefined
+                                        }
+                                      >
+                                        <div
+                                          className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg"
+                                          style={{
+                                            backgroundColor:
+                                              "var(--Ai-think-bg)",
+                                          }}
+                                        >
+                                          <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="18"
+                                            height="18"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                          >
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                            <polyline points="14 2 14 8 20 8" />
+                                          </svg>
+                                        </div>
+                                        <div className="flex flex-col gap-1.5 min-w-0 leading-tight">
+                                          <span className="text-[12px] max-w-[180px] text-[var(--chat-text)] leading-none">
+                                            {att.filename}
+                                          </span>
+                                          <span className="text-[11px] text-[var(--Ai-think-text)] leading-none">
+                                            {att.file_type.toUpperCase()}{" "}
+                                            {formatSize(att.file_size)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            <div className="text-[var(--Ai-content-text)] px-4 py-2 max-w-[100%] rounded-lg bg-[var(--Ai-content-bg)] text-sm font-normal whitespace-pre-wrap">
                               {item.content}
                             </div>
 
@@ -661,7 +1154,17 @@ const Home: React.FC = () => {
                 setInputValue={setInputValue}
                 sendMessage={handleSend}
                 loading={loading}
+                onStop={stopStreaming}
                 className="w-[60%] max-w-[680px] mr-3"
+                mode={inputMode}
+                setMode={setInputMode}
+                docList={docList}
+                selectedDocIds={selectedDocIds}
+                setSelectedDocIds={setSelectedDocIds}
+                uploadingFiles={uploadingFiles}
+                uploadedFiles={uploadedFiles}
+                onFilesAdd={handleFilesAdd}
+                onFileRemove={handleFileRemove}
               />
             </div>
           </Content>
@@ -671,9 +1174,11 @@ const Home: React.FC = () => {
       {/* 右侧菜单栏 */}
       <EADrawer
         message={currentMessage}
+        selectedToolCallId={selectedToolCallId}
         handleClose={() => {
           updateUserChat([]);
           setSelectedMessageId(null);
+          setSelectedToolCallId(null);
           toggleChat(false);
         }}
         getFriendListApi={getFriendListApi}
@@ -787,6 +1292,35 @@ const Home: React.FC = () => {
           </div>
         </div>
       </EAModal>
+
+      <EAModal
+        open={fileModalOpen}
+        title={fileModalContent?.filename || "文件内容"}
+        onCancel={() => {
+          setFileModalOpen(false);
+          setFileModalContent(null);
+        }}
+        className="!w-[40%]"
+      >
+        <div
+          className="max-h-[60vh] overflow-auto whitespace-pre-wrap text-sm"
+          style={{ color: "var(--chat-text)" }}
+        >
+          {fileModalContent?.text_content}
+        </div>
+      </EAModal>
+
+      <KnowledgeModal
+        open={knowledgeModalOpen}
+        docId={knowledgeModalDocId}
+        docName={knowledgeModalDocName}
+        onClose={() => {
+          setKnowledgeModalOpen(false);
+          setKnowledgeModalDocId(null);
+          setKnowledgeModalDocName("");
+        }}
+        onDeleted={refreshDocList}
+      />
     </div>
   );
 };

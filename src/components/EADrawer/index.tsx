@@ -29,6 +29,7 @@ import EAMessage from "../EAMessage";
 import SearchInput from "./ToolPage/SearchInput";
 import Lottie from "lottie-react";
 import SystemMessage from "./ToolPage/SystemMessage";
+import PPT from "./ToolPage/PPT";
 interface EADrawerSchema {
   message?: ChatItem; // 支持可选
   footer?: React.ReactNode | null;
@@ -38,6 +39,7 @@ interface EADrawerSchema {
   chatList: ChatItem[];
   handleChatClick: (id: number) => void;
   getFriendListApi: () => void;
+  selectedToolCallId?: number | null;
 }
 
 interface ShareChatSchema {
@@ -54,6 +56,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   chatList,
   handleChatClick,
   getFriendListApi,
+  selectedToolCallId,
 }) => {
   const chatOpen = useStore((state) => state.chatOpen);
   const [active, setActive] = useState("news"); // 当前高亮 tab
@@ -75,18 +78,27 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   const textsRef = useRef<HTMLDivElement>(null);
   const imagesRef = useRef<HTMLDivElement>(null);
 
-  // 同步 activeToolCallId 与父组件传入的 message.tool_calls
+  // 同步 activeToolCallId 与父组件传入的 selectedToolCallId / message.tool_calls
   useEffect(() => {
-    if (!message?.tool_calls || message.tool_calls.length <= 1) {
+    const toolCalls = message?.tool_calls?.filter((tc) => tc.tool_name !== "ppt") ?? [];
+    // 优先使用父组件传入的 selectedToolCallId
+    if (
+      selectedToolCallId &&
+      toolCalls.some((tc) => tc.id === selectedToolCallId)
+    ) {
+      setActiveToolCallId(selectedToolCallId);
+      return;
+    }
+    if (toolCalls.length <= 1) {
       setActiveToolCallId(null);
       return;
     }
     // 当前选中的工具调用仍然有效时，保持不变（动态更新内容）
-    const stillValid = message.tool_calls.some(
+    const stillValid = toolCalls.some(
       (call) => call.id === activeToolCallId,
     );
     if (!stillValid) {
-      setActiveToolCallId(message.tool_calls[0].id);
+      setActiveToolCallId(toolCalls[0].id);
     }
   }, [message?.tool_calls]);
 
@@ -316,7 +328,10 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       const tabGroupName = `web-search-tabs-${toolCall.id}`;
       return (
         <div className="flex flex-col w-full h-[95%]">
-          <div role="tablist" className="tabs tabs-lift h-full mt-3">
+          <div
+            role="tablist"
+            className="tabs tabs-lift h-full mt-3 justify-center"
+          >
             <input
               type="radio"
               role="tab"
@@ -396,20 +411,20 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
   /** 只负责 Tool 内容 */
   const renderToolContent = () => {
-    // 优先使用 tool_calls 数组
-    if (message?.tool_calls && message.tool_calls.length > 0) {
+    // 优先使用 tool_calls 数组（已过滤 PPT）
+    if (nonPptToolCalls.length > 0) {
       // 如果有多个工具调用，显示工具切换 tabs
-      if (message.tool_calls.length > 1) {
-        const selectedToolCallId = message.tool_calls.some(
+      if (nonPptToolCalls.length > 1) {
+        const selectedToolCallId = nonPptToolCalls.some(
           (call) => call.id === activeToolCallId,
         )
           ? activeToolCallId
-          : message.tool_calls[0].id;
-        const tabGroupName = `tool-calls-${message.id}`;
+          : nonPptToolCalls[0].id;
+        const tabGroupName = `tool-calls-${message?.id}`;
 
         return (
-          <div role="tablist" className="tabs tabs-lift h-full">
-            {message.tool_calls.flatMap((toolCall) => [
+          <div role="tablist" className="tabs tabs-lift h-full justify-center">
+            {nonPptToolCalls.flatMap((toolCall) => [
               <input
                 key={`tool-tab-${toolCall.id}`}
                 type="radio"
@@ -441,7 +456,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       return (
         <div className="flex flex-col h-full">
           <div className="flex-1 min-h-0">
-            {renderSingleToolContent(message.tool_calls[0])}
+            {renderSingleToolContent(nonPptToolCalls[0])}
           </div>
         </div>
       );
@@ -545,6 +560,20 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     setIsDragOver(false);
   };
 
+  const isPPT = message?.ppt_outline || message?.message_type === "ppt";
+
+  // 判断当前选中的工具是否为非 PPT 工具
+  const selectedIsNonPptTool = (() => {
+    if (!selectedToolCallId || !message?.tool_calls) return false;
+    const selected = message.tool_calls.find(
+      (tc) => tc.id === selectedToolCallId,
+    );
+    return selected ? selected.tool_name !== "ppt" : false;
+  })();
+
+  // 过滤掉 PPT 的工具调用列表
+  const nonPptToolCalls = message?.tool_calls?.filter((tc) => tc.tool_name !== "ppt") ?? [];
+
   /** Drawer 主体必须 return */
   return (
     <div
@@ -552,7 +581,9 @@ const EADrawer: React.FC<EADrawerSchema> = ({
         h-full transition-all duration-300 ease-in-out
         ${
           message
-            ? "w-[35%] !opacity-100"
+            ? isPPT && !selectedIsNonPptTool
+              ? "w-[50%] !opacity-100"
+              : "w-[35%] !opacity-100"
             : chatOpen
               ? "w-[35%] !opacity-100"
               : "w-0 !opacity-0"
@@ -565,11 +596,13 @@ const EADrawer: React.FC<EADrawerSchema> = ({
         <h3 className="text-lg font-bold">
           {chatOpen
             ? "聊天"
-            : message?.tool_calls && message.tool_calls.length > 0
-              ? message.tool_calls.length > 1
-                ? `工具调用 (${message.tool_calls.length})`
-                : getToolDisplayName(message.tool_calls[0].tool_name)
-              : ""}
+            : isPPT && !selectedIsNonPptTool
+              ? "PPT 演示"
+              : nonPptToolCalls.length > 0
+                ? nonPptToolCalls.length > 1
+                  ? `工具调用 (${nonPptToolCalls.length})`
+                  : getToolDisplayName(nonPptToolCalls[0].tool_name)
+                : ""}
         </h3>
         <button
           className="text-lg font-bold cursor-pointer"
@@ -852,8 +885,74 @@ const EADrawer: React.FC<EADrawerSchema> = ({
             </div>
           )}
         </div>
-      ) : message?.tool_calls && message.tool_calls.length > 0 ? (
-        renderToolContent()
+      ) : isPPT || (message?.tool_calls && nonPptToolCalls.length > 0) ? (
+        <>
+          {/* PPT 内容：保持挂载，用 display 控制显隐避免 iframe 重载 */}
+          {isPPT && (
+            <div
+              className="h-full overflow-y-auto pb-10"
+              style={{ display: selectedIsNonPptTool ? "none" : "block" }}
+            >
+              {message?.ppt_outline ? (
+                <PPT message={message} />
+              ) : (() => {
+                const pptTool = message?.tool_calls?.find(
+                  (tc) => tc.tool_name === "ppt",
+                );
+                if (pptTool?.tool_content) {
+                  try {
+                    const pptData =
+                      typeof pptTool.tool_content === "string"
+                        ? JSON.parse(pptTool.tool_content)
+                        : pptTool.tool_content;
+                    if (pptData.slides && pptData.outline) {
+                      const pptMessage: ChatItem = {
+                        ...message!,
+                        ppt_outline: pptData.outline,
+                        ppt_style: pptData.style,
+                        ppt_slides: Object.fromEntries(
+                          pptData.slides.map((s: any) => [s.index, s.html]),
+                        ),
+                        ppt_slide_status: Object.fromEntries(
+                          pptData.slides.map((s: any) => [
+                            s.index,
+                            "done" as const,
+                          ]),
+                        ),
+                      };
+                      return <PPT message={pptMessage} />;
+                    }
+                  } catch {
+                    // parse error
+                  }
+                }
+                return (
+                  <div className="p-4">
+                    <div className="rounded-lg overflow-hidden border border-white/10 shadow-lg">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-[var(--code-head)]">
+                        <span className="text-sm font-semibold text-[var(--Ai-content-text)]">
+                          PPT 演示
+                        </span>
+                      </div>
+                      <div className="p-4 text-sm text-[var(--Ai-content-text)]">
+                        {message?.content || "PPT 数据加载失败"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          {/* 工具内容：PPT 可见时隐藏 */}
+          {nonPptToolCalls.length > 0 && (
+            <div
+              className="h-full"
+              style={{ display: isPPT && !selectedIsNonPptTool ? "none" : "flex", flexDirection: "column" }}
+            >
+              {renderToolContent()}
+            </div>
+          )}
+        </>
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center">
           <Empty description="" />

@@ -1,21 +1,26 @@
 # EasyAgent
 
-EasyAgent 是一款基于 React 19 + TypeScript + Vite 构建的多功能 AI Agent 前端应用，提供 AI 流式对话、工具调用（联网搜索、天气查询等）、好友实时通讯（WebSocket）、聊天分享、系统消息、主题切换等能力，旨在打造一个开箱即用、体验现代的 AI 助手平台。
+EasyAgent 是一款基于 React 19 + TypeScript + Vite 构建的多功能 AI Agent 前端应用，提供 AI 流式对话、知识库文档管理（RAG）、文件附件上传、PPT 演示生成、工具调用（联网搜索、天气查询等）、好友实时通讯（WebSocket）、聊天分享、系统消息、主题切换等能力，旨在打造一个开箱即用、体验现代的 AI 助手平台。
 
 ## ✨ 主要特性
 
-- **AI 流式对话**：基于 SSE（`fetch` + `ReadableStream`）的字符级流式响应，支持思考内容（think_content）、正文内容、工具调用结果分通道展示，并通过 16ms 节流缓冲池保证渲染流畅。
+- **AI 流式对话**：基于 SSE（`fetch` + `ReadableStream`）的字符级流式响应，支持思考内容（think_content）、正文内容、工具调用结果分通道展示，并通过 16ms 节流缓冲池保证渲染流畅。支持流式中断（AbortController）。
+- **知识库管理**：支持全局文档上传（.txt/.doc/.docx/.md），文档分块状态追踪（处理中/已完成/失败），文档内容预览与分块查看，文档删除与重试。对话中可挂载知识库文档，AI 基于 RAG 检索生成回答时展示引用来源（rag_references）。
+- **文件附件**：输入框支持拖拽/点击上传文件附件（支持 .txt/.md/.csv/.json/.py/.js/.pdf/.doc/.docx/.jpg/.jpeg/.png/.webp），图片类型自动缩略图预览，非图片类型显示文件名与大小标签，支持上传中状态展示与单个移除。
 - **Markdown 渲染**：使用 `react-markdown` + `remark-gfm` 渲染 Markdown，集成 `react-syntax-highlighter` 实现代码块语法高亮，并支持一键复制。
 - **工具调用展示**：在 `EADrawer` 抽屉中以多 Tab 形式展示 AI 工具结果：
   - `web_search`：网页文本 / 图片 / 新闻
   - `weather_query`：未来天气列表卡片
+  - `ppt`：PPT 演示生成（详见下方）
   - 其他工具可扩展
+- **PPT 演示生成**：输入框支持 Text / PPT 模式切换，选择 PPT 模式后 AI 通过流式 SSE 逐步生成幻灯片大纲（`outline`）和逐页 HTML（`slide_start` → `slide_chunk` → `slide_end`）。每张幻灯片支持大纲、HTML 源码、PPT 预览三个 Tab 切换查看，PPT 预览通过 `iframe` + `srcDoc` 渲染，第三方资源（Tailwind CSS、Lucide、Reveal.js、Google Fonts）由本地 `/static/vendor/` 提供以加速加载。生成完成后侧边栏自动展开显示完整演示。
 - **好友实时通讯**：基于原生 WebSocket（`ws://localhost:8000/user_chat/ws/chat/{user_id}`）实现端到端消息推送、未读消息计数、已读回执、好友请求、消息状态同步。
 - **聊天分享**：可将 AI 会话分享给好友，好友可接收 / 取消分享。
 - **系统消息中心**：好友请求、系统通知集中展示并支持已读状态。
 - **历史会话管理**：会话列表支持创建、重命名、删除、切换。
 - **用户体系**：注册 / 登录 / 忘记密码 / 注销账号 / 修改资料 / 头像上传。
 - **多主题切换**：基于 daisyUI 的明亮 / 黑夜 / 跟随系统三种模式，使用 CSS 变量统一控制配色。
+- **输入模式切换**：输入框底部支持 Text / PPT 模式一键切换，Text 为普通对话，PPT 为幻灯片生成模式。
 - **响应式现代 UI**：Tailwind CSS v4 + daisyUI + Ant Design 6 + Lottie 动画 + GSAP + animate.css 综合呈现。
 
 ## 🛠 技术栈
@@ -32,6 +37,7 @@ EasyAgent 是一款基于 React 19 + TypeScript + Vite 构建的多功能 AI Age
 | Markdown | react-markdown、remark-gfm、react-syntax-highlighter |
 | 网络请求 | Axios（含拦截器、统一封装）、原生 fetch（流式）、WebSocket |
 | 动画 | Lottie（lottie-react）、GSAP、animate.css |
+| PPT 渲染 | Reveal.js（本地 vendor）、iframe sandbox 隔离渲染 |
 | 工具库 | dayjs、lodash、uuid |
 | 代码规范 | ESLint 9、typescript-eslint、eslint-plugin-react-hooks、eslint-plugin-react-refresh |
 
@@ -42,7 +48,8 @@ EasyAgent
 ├── public/                       # 静态资源
 ├── src
 │   ├── api/                      # 后端 API 封装
-│   │   ├── chat.ts               # AI 聊天记录 / 创建 / 删除 / 重命名 / 取消分享
+│   │   ├── chat.ts               # AI 聊天记录 / 创建 / 删除 / 重命名 / 取消分享 / 文件附件上传
+│   │   ├── knowledge.ts          # 知识库文档上传 / 列表 / 内容 / 删除 / 重试
 │   │   ├── user.ts               # 登录 / 注册 / 忘记密码 / 注销 / 头像上传 / 资料更新
 │   │   ├── userChat.ts           # 好友聊天 REST + WebSocket 工厂
 │   │   ├── userFriend.ts         # 好友列表 / 搜索 / 添加
@@ -51,9 +58,10 @@ EasyAgent
 │   ├── components/               # 业务组件库（EA 前缀）
 │   │   ├── EAActionBar.tsx       # 消息操作条（复制等）
 │   │   ├── EAButton.tsx          # 通用按钮
-│   │   ├── EADrawer/             # 右侧多功能抽屉（工具结果 + 好友聊天）
-│   │   │   └── ToolPage/         # Weather / News / Images / Texts / SearchInput / SystemMessage
-│   │   ├── EAInput/              # 自适应高度的发送输入框（含中文输入法适配）
+│   │   ├── EADrawer/             # 右侧多功能抽屉（工具结果 + 好友聊天 + PPT 演示）
+│   │   │   └── ToolPage/         # Weather / News / Images / Texts / SearchInput / SystemMessage / PPT
+│   │   ├── EAInput/              # 自适应高度的发送输入框（含中文输入法适配、文件附件、知识库文档挂载）
+│   │   ├── EAKnowledge/          # 知识库文档管理（上传、列表、内容预览、删除）
 │   │   ├── EALoader.tsx          # 文字流光加载动画
 │   │   ├── EALoading.tsx         # 全局加载遮罩
 │   │   ├── EAMarkdown/           # Markdown + 代码高亮渲染
@@ -136,10 +144,11 @@ npm run lint
 - `src/utils/axios.ts` 中的 `baseURL`
 - `src/utils/chat.ts` 中的 `fetch` 地址
 - `src/api/userChat.ts` 中的 `createChatSocket` WebSocket URL
+- `vite.config.ts` 中的 `/static` 代理目标地址（用于 PPT 第三方资源本地代理）
 
 ## 🧠 流式消息实现要点
 
-`src/utils/stream.ts` 中的 `useStreamAIMessage` 通过缓冲池 + `setTimeout(16ms)` 节流，将服务端推送的 chunk 按类型（`think` / `text` / `tool_content` / `tool_name`）合并写入 Zustand store，避免高频渲染抖动；流结束后强制 flush，并标记 `finished = true`。
+`src/utils/stream.ts` 中的 `useStreamAIMessage` 通过缓冲池 + `setTimeout(16ms)` 节流，将服务端推送的 chunk 按类型（`think` / `text` / `tool_content` / `tool_name` / `outline` / `slide_start` / `slide_chunk` / `slide_end`）合并写入 Zustand store，避免高频渲染抖动；流结束后强制 flush，并标记 `finished = true`。支持 `AbortController` 中断流式传输（`stopStreaming`）。PPT 相关 chunk 用于流式构建幻灯片大纲与逐页 HTML 内容。RAG 引用（`references`）直接写入 store 供前端展示。
 
 ## 🎨 主题与样式
 

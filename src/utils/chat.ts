@@ -1,10 +1,14 @@
 type SendMessageSchemas = {
   id: number;
   message: string;
+  mode?: string;
+  doc_ids?: number[];
+  file_ids?: number[];
 };
 
 export async function* sendMessage(
   params: SendMessageSchemas,
+  signal?: AbortSignal,
 ): AsyncGenerator<Record<string, any>, void, unknown> {
   const res = await fetch("http://localhost:8000/chat/stream", {
     method: "POST",
@@ -13,6 +17,7 @@ export async function* sendMessage(
       Authorization: `Bearer ${localStorage.getItem("token")}`,
     },
     body: JSON.stringify(params),
+    signal,
   });
 
   if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
