@@ -53,7 +53,7 @@ const EAModal: React.FC<Schemas> = ({
 
       {/* Modal 内容 */}
       <div
-        className={`relative w-[25%] max-w-full bg-base-300 rounded-lg shadow-lg animate__animated ${className} ${
+        className={`relative w-[25%] max-w-full bg-base-300 rounded-lg shadow-lg animate__animated overflow-y-auto ${className} ${
           animatingOut ? "animate__fadeOut" : "animate__fadeIn"
         }`}
         style={{ animationDuration: "0.4s" }}

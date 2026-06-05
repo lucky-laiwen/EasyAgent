@@ -40,7 +40,7 @@ const CodeBlock = memo(
           style={actualTheme === "light" ? oneLight : oneDark}
           language={language}
           PreTag="div"
-          className="rounded-lg !m-0"
+          className="!m-0"
         >
           {value}
         </SyntaxHighlighter>

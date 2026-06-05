@@ -57,6 +57,14 @@ export interface ToolCall {
   created_at: string;
 }
 
+// PPT 幻灯片图片
+export interface PptSlideImage {
+  url: string;
+  type: "web" | "upload";
+  description?: string;
+  position: "background" | "main";
+}
+
 // PPT 幻灯片大纲
 export interface PptSlideOutline {
   index: number;
@@ -66,6 +74,7 @@ export interface PptSlideOutline {
   layout?: string;
   points?: string[];
   visualSuggestion?: string;
+  images?: PptSlideImage[];
 }
 
 // 聊天消息结构
@@ -92,6 +101,8 @@ export interface ChatItem {
     cardStyle?: string;
     backgroundCSS?: string;
   };
+  ppt_outline_status?: "pending" | "confirmed" | "generating";
+  ppt_outline_message_id?: number;
   ppt_slides?: Record<number, string>;
   ppt_slide_status?: Record<number, "loading" | "done" | "error">;
   rag_references?: Array<{
@@ -247,6 +258,8 @@ export function updateMessage({
   think_content,
   ppt_outline,
   ppt_style,
+  ppt_outline_status,
+  ppt_outline_message_id,
   ppt_slide_html,
   ppt_slide_index,
   ppt_slide_status,
@@ -260,6 +273,8 @@ export function updateMessage({
   think_content?: string;
   ppt_outline?: PptSlideOutline[];
   ppt_style?: ChatItem["ppt_style"];
+  ppt_outline_status?: "pending" | "confirmed" | "generating";
+  ppt_outline_message_id?: number;
   ppt_slide_html?: string;
   ppt_slide_index?: number;
   ppt_slide_status?: "loading" | "done" | "error";
@@ -304,6 +319,8 @@ export function updateMessage({
       ...(finished !== undefined && { finished }),
       ...(ppt_outline !== undefined && { ppt_outline }),
       ...(ppt_style !== undefined && { ppt_style }),
+      ...(ppt_outline_status !== undefined && { ppt_outline_status }),
+      ...(ppt_outline_message_id !== undefined && { ppt_outline_message_id }),
       ...(message_type !== undefined && { message_type }),
       ...(rag_references !== undefined && { rag_references }),
       tool_calls: newToolCalls,
@@ -312,6 +329,15 @@ export function updateMessage({
     };
   });
 
+  useStore.setState({ messages });
+}
+
+// 重置消息的指定字段（用于重新生成等场景，直接覆写而非拼接）
+export function resetMessage(id: number, updates: Partial<ChatItem>) {
+  const messages = useStore.getState().messages?.map((item) => {
+    if (item.id !== id) return item;
+    return { ...item, ...updates };
+  });
   useStore.setState({ messages });
 }
 

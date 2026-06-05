@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Image, message } from "antd";
 import styles from "./EAInput.module.scss";
 import type { DocItem } from "@/api/knowledge";
+import { IconFileText, IconBookOpen, IconPaperclip, IconStop, IconSend } from "@/assets/icons";
 
 export interface UploadedFile {
   file_id: number;
@@ -281,20 +282,7 @@ const EAInput = (props: EAInputSchema) => {
                         className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg"
                         style={{ backgroundColor: "var(--Ai-think-bg)" }}
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
+                        <IconFileText className="w-[18px] h-[18px]" />
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span
@@ -343,19 +331,7 @@ const EAInput = (props: EAInputSchema) => {
                         className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg"
                         style={{ backgroundColor: "var(--Ai-think-bg)" }}
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                        </svg>
+                        <IconBookOpen className="w-[18px] h-[18px]" />
                       </div>
                       <span
                         className="text-[12px] truncate max-w-[180px]"
@@ -411,19 +387,7 @@ const EAInput = (props: EAInputSchema) => {
                   title="添加文件附件"
                   disabled={isUploading}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
+                  <IconPaperclip className="w-5 h-5" />
                 </button>
               )}
 
@@ -436,19 +400,7 @@ const EAInput = (props: EAInputSchema) => {
                     onClick={() => setDocDropdownOpen(!docDropdownOpen)}
                     title="挂载知识库文档"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-                    </svg>
+                    <IconBookOpen className="w-5 h-5" />
                   </button>
                   {docDropdownOpen &&
                     createPortal(
@@ -555,16 +507,9 @@ const EAInput = (props: EAInputSchema) => {
             >
               <i>
                 {loading ? (
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12" rx="2" />
-                  </svg>
+                  <IconStop className="w-5 h-5" />
                 ) : (
-                  <svg viewBox="0 0 512 512">
-                    <path
-                      fill="currentColor"
-                      d="M473 39.05a24 24 0 0 0-25.5-5.46L47.47 185h-.08a24 24 0 0 0 1 45.16l.41.13l137.3 58.63a16 16 0 0 0 15.54-3.59L422 80a7.07 7.07 0 0 1 10 10L226.66 310.26a16 16 0 0 0-3.59 15.54l58.65 137.38c.06.2.12.38.19.57c3.2 9.27 11.3 15.81 21.09 16.25h1a24.63 24.63 0 0 0 23-15.46L478.39 64.62A24 24 0 0 0 473 39.05"
-                    ></path>
-                  </svg>
+                  <IconSend className="w-5 h-5" />
                 )}
               </i>
             </button>

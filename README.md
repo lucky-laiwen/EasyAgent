@@ -13,7 +13,7 @@ EasyAgent 是一款基于 React 19 + TypeScript + Vite 构建的多功能 AI Age
   - `weather_query`：未来天气列表卡片
   - `ppt`：PPT 演示生成（详见下方）
   - 其他工具可扩展
-- **PPT 演示生成**：输入框支持 Text / PPT 模式切换，选择 PPT 模式后 AI 通过流式 SSE 逐步生成幻灯片大纲（`outline`）和逐页 HTML（`slide_start` → `slide_chunk` → `slide_end`）。每张幻灯片支持大纲、HTML 源码、PPT 预览三个 Tab 切换查看，PPT 预览通过 `iframe` + `srcDoc` 渲染，第三方资源（Tailwind CSS、Lucide、Reveal.js、Google Fonts）由本地 `/static/vendor/` 提供以加速加载。生成完成后侧边栏自动展开显示完整演示。
+- **PPT 演示生成**：输入框支持 Text / PPT 模式切换，选择 PPT 模式后 AI 通过流式 SSE 逐步生成幻灯片大纲（`outline`）和逐页 HTML（`slide_start` → `slide_chunk` → `slide_end`）。大纲支持在线编辑（标题、描述、布局、要点、图片管理、主题样式），并支持一键重新生成（二次确认 + Loading 状态）。每张幻灯片支持大纲、HTML 源码、PPT 预览三个 Tab 切换查看，PPT 预览通过 `iframe` + `srcDoc` 渲染，第三方资源（Tailwind CSS、Lucide、Reveal.js、Google Fonts）由本地 `/static/vendor/` 提供以加速加载。生成完成后侧边栏自动展开显示完整演示。
 - **好友实时通讯**：基于原生 WebSocket（`ws://localhost:8000/user_chat/ws/chat/{user_id}`）实现端到端消息推送、未读消息计数、已读回执、好友请求、消息状态同步。
 - **聊天分享**：可将 AI 会话分享给好友，好友可接收 / 取消分享。
 - **系统消息中心**：好友请求、系统通知集中展示并支持已读状态。

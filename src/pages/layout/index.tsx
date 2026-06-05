@@ -31,6 +31,7 @@ import {
   updateUnReadMsg,
   updateAllChatMsg,
   updatedSocket,
+  updateMessage,
 } from "@/store/store";
 import {
   getUnreadMessageList,
@@ -38,17 +39,20 @@ import {
   createChatSocket,
 } from "@/api/userChat";
 import EATheme from "@/components/EAThema";
-import { useStreamAIMessage } from "@/utils/stream";
+import { useStreamAIMessage, useStreamPpt } from "@/utils/stream";
 import { logout, uploadFile, updateUserInfo } from "@/api/user";
-import MenuFoldDark from "@/assets/menu-fold-dark.svg";
-import MenuFoldLight from "@/assets/menu-fold-light.svg";
 import EADrawer from "@/components/EADrawer";
 import EAModal from "@/components/EAModal";
-import NewChatLight from "@/assets/new-chat-light.svg";
-import NewChatDark from "@/assets/new-chat-dark.svg";
-import Logo from "@/assets/EasyAgent-Logo.svg";
-import AiChatDark from "@/assets/ai-chat-dark.svg";
-import AiChatLight from "@/assets/ai-chat-light.svg";
+import {
+  IconPresentation,
+  IconFileText,
+  IconDeleteUser,
+  IconLogout,
+  IconMenuFold,
+  IconNewChat,
+  IconLogoUrl,
+  IconAiChat,
+} from "@/assets/icons";
 import { getFriendList } from "@/api/userFriend";
 import EALoader from "@/components/EALoader";
 import EAMessage from "@/components/EAMessage";
@@ -72,12 +76,28 @@ export interface ChatItem {
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { streamAIMessage, stopStreaming } = useStreamAIMessage();
+  const {
+    streamOutline,
+    confirmAndGenerate,
+    stopStreaming: stopPptStreaming,
+  } = useStreamPpt();
+
+  const handleStopStreaming = useCallback(() => {
+    stopStreaming();
+    stopPptStreaming();
+  }, [stopStreaming, stopPptStreaming]);
+  const [pptOutlineMsgId, setPptOutlineMsgId] = useState<number | null>(null);
+  const [pptOutlineBackendMsgId, setPptOutlineBackendMsgId] = useState<
+    number | null
+  >(null);
+  const [pptConfirmLoading, setPptConfirmLoading] = useState(false);
+  const [pptGenerating, setPptGenerating] = useState(false);
+  const [pptRegenerating, setPptRegenerating] = useState(false);
   const messages = useStore((state) => state.messages) ?? [];
   const unreadMsg = useStore((state) => state.unReadMsg);
   const systemInfo = useStore((state) => state.systemInfo);
   const unReadCount =
     unreadMsg.length + systemInfo.filter((info) => info.is_read === 0).length;
-  const actualTheme = useStore((state) => state.actualTheme);
   const userInfo = useStore((state) => state.user);
   const [chatList, setChatList] = useState<ChatItem[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -105,7 +125,9 @@ const Home: React.FC = () => {
   // 文档列表更新时，清理已不存在的选中文档
   useEffect(() => {
     if (selectedDocIds.length === 0) return;
-    const validIds = docList.filter((d) => d.status === "completed").map((d) => d.id);
+    const validIds = docList
+      .filter((d) => d.status === "completed")
+      .map((d) => d.id);
     const filtered = selectedDocIds.filter((id) => validIds.includes(id));
     if (filtered.length !== selectedDocIds.length) {
       setSelectedDocIds(filtered);
@@ -144,6 +166,18 @@ const Home: React.FC = () => {
     () => messages.find((m) => m.id === selectedMessageId),
     [messages, selectedMessageId],
   );
+
+  // 当选中消息有 pending 大纲时，同步 pptOutlineMsgId
+  useEffect(() => {
+    if (
+      currentMessage?.message_type === "ppt" &&
+      currentMessage?.ppt_outline_status === "pending" &&
+      currentMessage?.ppt_outline
+    ) {
+      setPptOutlineMsgId(currentMessage.id);
+      setPptOutlineBackendMsgId(currentMessage.ppt_outline_message_id ?? null);
+    }
+  }, [currentMessage]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userName, setUserName] = useState<string | undefined>(userInfo?.name);
@@ -266,7 +300,7 @@ const Home: React.FC = () => {
           friend: {
             id: "system",
             name: "系统消息",
-            avatar: Logo,
+            avatar: IconLogoUrl,
           },
         },
       ]);
@@ -281,10 +315,6 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (isUserAtBottom) scrollToBottom();
   }, [messages]);
-  if (!localStorage.getItem("token")) {
-    navigate("/login");
-    return null;
-  }
 
   // 切换指定内容
   const handleChatClick = async (id: number) => {
@@ -305,7 +335,7 @@ const Home: React.FC = () => {
       };
       const messagesWithType = (res.data.data as ChatItemStore[]).map(
         (item) => {
-          const base = {
+          const base: any = {
             ...item,
             type: item.think_content ? "think" : "text",
             finished: true,
@@ -316,12 +346,75 @@ const Home: React.FC = () => {
           };
           // PPT 历史消息保留 message_type
           if ((item as any).message_type === "ppt") {
-            (base as any).message_type = "ppt";
+            base.message_type = "ppt";
           }
+
+          // 识别 ppt_outline 工具调用 → 恢复大纲
+          const outlineTool = item.tool_calls?.find(
+            (tc) => tc.tool_name === "ppt_outline",
+          );
+          if (outlineTool) {
+            const outlineData = safeParse(outlineTool.tool_content);
+            // 兼容两种数据结构：outline.slides 或直接 slides
+            const slides = outlineData?.outline?.slides || outlineData?.slides;
+            const style = outlineData?.outline?.style || outlineData?.style;
+            if (slides) {
+              base.ppt_outline = slides;
+              base.ppt_style = style;
+              // 使用消息 ID 而非工具调用 ID，后端需要消息 ID
+              base.ppt_outline_message_id = item.id;
+              base.message_type = "ppt";
+              // status=2 表示待确认，否则为已确认
+              if (outlineTool.status === 2) {
+                base.ppt_outline_status = "pending";
+              } else {
+                base.ppt_outline_status = "confirmed";
+              }
+            }
+          }
+
+          // 识别 ppt 工具调用 → 恢复已生成的 PPT 幻灯片
+          const pptTool = item.tool_calls?.find((tc) => tc.tool_name === "ppt");
+          if (pptTool && pptTool.status === 1) {
+            const pptData = safeParse(pptTool.tool_content);
+            if (pptData?.slides) {
+              base._pptSlidesData = pptData.slides;
+              base._pptHasSlides = true;
+              base.message_type = "ppt";
+            }
+          }
+
           return base;
         },
       );
-      console.log(messagesWithType);
+
+      // 合并：将 ppt 幻灯片数据合并到对应的 outline 消息中
+      for (let i = 0; i < messagesWithType.length; i++) {
+        const msg = messagesWithType[i];
+        if (msg._pptHasSlides && msg._pptSlidesData) {
+          // 找到前一个有 ppt_outline 的消息
+          for (let j = i - 1; j >= 0; j--) {
+            const prevMsg = messagesWithType[j];
+            if (prevMsg.ppt_outline && prevMsg.message_type === "ppt") {
+              const slidesMap: Record<number, string> = {};
+              const statusMap: Record<number, "done"> = {};
+              msg._pptSlidesData.forEach((s: any) => {
+                slidesMap[s.index] = s.html;
+                statusMap[s.index] = "done";
+              });
+              prevMsg.ppt_slides = slidesMap;
+              prevMsg.ppt_slide_status = statusMap;
+              prevMsg.ppt_outline_status = "confirmed";
+              // 标记当前消息不再显示 PPT 卡片
+              msg._skipPptCard = true;
+              break;
+            }
+          }
+        }
+        // 清理临时字段
+        delete msg._pptSlidesData;
+        delete msg._pptHasSlides;
+      }
 
       setSelectedMenuKey(id.toString());
       setMessages(messagesWithType);
@@ -481,28 +574,60 @@ const Home: React.FC = () => {
           message: sendText,
         });
         if (result.data.success) {
-          const chatId = result.data.data.id;
-          setCurrentChatId(chatId);
-          setSelectedMenuKey(chatId.toString());
+          const newChatId = result.data.data.id;
+          setCurrentChatId(newChatId);
+          setSelectedMenuKey(newChatId.toString());
           getHisttoryList();
 
+          if (sendMode === "ppt") {
+            const res = await streamOutline(
+              newChatId,
+              sendText,
+              sendDocIds,
+              sendFileIds,
+            );
+            setPptOutlineMsgId(res.aiMessageId);
+            if (res.outlineMessageId) {
+              setPptOutlineBackendMsgId(res.outlineMessageId);
+            }
+            // 大纲生成完成后打开侧边栏
+            setSelectedMessageId(res.aiMessageId);
+            setSelectedToolCallId(null);
+          } else {
+            await streamAIMessage(
+              newChatId,
+              sendText,
+              sendMode,
+              sendDocIds,
+              sendFileIds,
+            );
+          }
+        }
+      } else {
+        getHisttoryList();
+        if (sendMode === "ppt") {
+          const res = await streamOutline(
+            currentChatId,
+            sendText,
+            sendDocIds,
+            sendFileIds,
+          );
+          setPptOutlineMsgId(res.aiMessageId);
+          if (res.outlineMessageId) {
+            setPptOutlineBackendMsgId(res.outlineMessageId);
+          }
+          // 大纲生成完成后打开侧边栏
+          setSelectedMessageId(res.aiMessageId);
+          setSelectedToolCallId(null);
+        } else {
           await streamAIMessage(
-            chatId,
+            currentChatId,
             sendText,
             sendMode,
             sendDocIds,
             sendFileIds,
           );
         }
-      } else {
-        getHisttoryList();
-        await streamAIMessage(
-          currentChatId,
-          sendText,
-          sendMode,
-          sendDocIds,
-          sendFileIds,
-        );
       }
     } finally {
       setLoading(false);
@@ -510,7 +635,7 @@ const Home: React.FC = () => {
   };
 
   // 注销账户
-  const handleLogout = async () => {
+  const handleIconLogout = async () => {
     const res = await logout();
     if (res.data.success) {
       showLoading();
@@ -594,13 +719,99 @@ const Home: React.FC = () => {
     setSelectedMessageId(null);
     setSelectedToolCallId(null);
     setInputMode("text");
+    setPptOutlineMsgId(null);
+    setPptOutlineBackendMsgId(null);
   };
+
+  // PPT 大纲确认生成
+  const handleConfirmOutline = useCallback(
+    async (outline: { style: any; slides: any[] }) => {
+      if (!currentChatId || !pptOutlineMsgId) return;
+      // Fallback: read backend message id from the store message object
+      const effectiveBackendMsgId =
+        pptOutlineBackendMsgId ??
+        useStore.getState().messages?.find((m) => m.id === pptOutlineMsgId)
+          ?.ppt_outline_message_id;
+      if (!effectiveBackendMsgId) {
+        EAMessage.error("无法获取大纲消息 ID，请重新生成");
+        return;
+      }
+      setPptConfirmLoading(true);
+      setPptGenerating(true);
+      try {
+        await confirmAndGenerate(
+          currentChatId,
+          pptOutlineMsgId,
+          effectiveBackendMsgId,
+          outline,
+        );
+      } catch (e: any) {
+        EAMessage.error(e.message || "生成失败");
+      } finally {
+        setPptConfirmLoading(false);
+        setPptGenerating(false);
+        setPptOutlineMsgId(null);
+        setPptOutlineBackendMsgId(null);
+      }
+    },
+    [
+      currentChatId,
+      pptOutlineMsgId,
+      pptOutlineBackendMsgId,
+      confirmAndGenerate,
+    ],
+  );
+
+  // PPT 大纲取消（重新生成）
+  const handleCancelOutline = useCallback(() => {
+    stopPptStreaming();
+    // 重置大纲状态，允许重新生成
+    if (pptOutlineMsgId) {
+      updateMessage({
+        id: pptOutlineMsgId,
+        ppt_outline: undefined,
+        ppt_style: undefined,
+        ppt_outline_status: undefined,
+        ppt_outline_message_id: undefined,
+      });
+    }
+    setPptOutlineMsgId(null);
+    setPptOutlineBackendMsgId(null);
+  }, [pptOutlineMsgId, stopPptStreaming]);
+
+  // PPT 大纲重新生成（只传 message_id，后端自行查询聊天 ID 和原始提示词）
+  const handleRegenerateOutline = useCallback(async () => {
+    if (!pptOutlineMsgId) return;
+    setPptRegenerating(true);
+    try {
+      const res = await streamOutline(
+        0,
+        "",
+        undefined,
+        undefined,
+        pptOutlineMsgId,
+        pptOutlineBackendMsgId ?? undefined,
+      );
+      if (res.outlineMessageId) {
+        setPptOutlineBackendMsgId(res.outlineMessageId);
+      }
+    } catch (e: any) {
+      EAMessage.error(e.message || "重新生成失败");
+    } finally {
+      setPptRegenerating(false);
+    }
+  }, [pptOutlineMsgId, pptOutlineBackendMsgId, streamOutline]);
 
   const handleOpenKnowledgeModal = (docId: number, docName: string) => {
     setKnowledgeModalDocId(docId);
     setKnowledgeModalDocName(docName);
     setKnowledgeModalOpen(true);
   };
+
+  if (!localStorage.getItem("token")) {
+    navigate("/login");
+    return null;
+  }
 
   return (
     <div className="flex w-full h-screen overflow-hidden transition-all duration-300">
@@ -615,18 +826,14 @@ const Home: React.FC = () => {
         <div className="flex flex-col gap-2 border-b-3 border-base-300 p-2 relative">
           <div className="flex flex-col justify-center gap-2">
             <div className="flex items-center gap-4 my-2 p-2 rounded-lg transition-all duration-300">
-              <img src={Logo} className="w-[36px] h-[36px]" />
+              <img src={IconLogoUrl} className="w-[36px] h-[36px]" />
               <div>Easy-Agent</div>
             </div>
             <EAButton
               text="创建新会话"
               onClick={handleNewChat}
               icon={
-                <img
-                  src={actualTheme === "dark" ? AiChatDark : AiChatLight}
-                  alt=""
-                  className="w-4 h-4 text-white"
-                />
+                <IconAiChat className="w-4 h-4" />
               }
               className="flex justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
             />
@@ -659,11 +866,7 @@ const Home: React.FC = () => {
                   setSelectedToolCallId(null);
                 }}
                 icon={
-                  <img
-                    src={actualTheme === "dark" ? NewChatDark : NewChatLight}
-                    alt=""
-                    className="w-4 h-4 text-white"
-                  />
+                  <IconNewChat className="w-4 h-4" />
                 }
                 className="flex w-full justify-start bg-[transparent] rounded-lg border-none shadow-none hover:bg-[var(--Ai-think-bg)]"
               />
@@ -727,12 +930,11 @@ const Home: React.FC = () => {
               ref={messageContainerRef}
               className="overflow-y-auto w-[full] flex flex-col items-center gap-2"
             >
-              <img
-                src={actualTheme === "dark" ? MenuFoldLight : MenuFoldDark}
-                alt=""
-                className={`absolute top-[10px] left-[0%] cursor-pointer hover:bg-white/10 p-1 rounded-sm ${
+              <IconMenuFold
+                className={`w-7 h-7 absolute top-[5px] left-[0%] cursor-pointer hover:bg-white/10 p-1 rounded-sm ${
                   slideHide ? "" : "rotate-180"
                 }`}
+                style={{ color: "var(--chat-text)" }}
                 onClick={() => setSlideHide(!slideHide)}
               />
 
@@ -756,7 +958,11 @@ const Home: React.FC = () => {
                     {/* 工具调用卡片 */}
 
                     {item.tool_calls
-                      ?.filter((tc) => tc.tool_name !== "ppt")
+                      ?.filter(
+                        (tc) =>
+                          tc.tool_name !== "ppt" &&
+                          tc.tool_name !== "ppt_outline",
+                      )
                       .map((toolCall) => (
                         <div
                           key={toolCall.id}
@@ -792,25 +998,6 @@ const Home: React.FC = () => {
                               <span className="text-sm font-semibold tracking-wide truncate">
                                 {getToolDisplayName(toolCall.tool_name)}
                               </span>
-                              <span
-                                className={`
-                                flex-shrink-0 flex items-center gap-1 text-[11px]
-                                ${
-                                  toolCall.status === 1
-                                    ? "text-green-400"
-                                    : toolCall.status === 0
-                                      ? "text-red-400"
-                                      : "text-yellow-400"
-                                }
-                              `}
-                              >
-                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
-                                {toolCall.status === 1
-                                  ? "已完成"
-                                  : toolCall.status === 0
-                                    ? "失败"
-                                    : "思考中"}
-                              </span>
                             </div>
                             <p className="text-xs mt-0.5 text-[var(--Ai-think-text)] truncate">
                               {getToolInputPreview(toolCall.tool_input)}
@@ -820,18 +1007,19 @@ const Home: React.FC = () => {
                           {/* 右侧状态 */}
                           <div className="flex-shrink-0 flex items-center">
                             {toolCall.status === 2 ? (
-                              <Loader2
-                                className="animate-spin text-primary"
-                                size={18}
-                              />
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                                <Loader2 className="animate-spin" size={12} />
+                                思考中
+                              </span>
                             ) : toolCall.status === 1 ? (
-                              <Check
-                                className="text-green-400"
-                                size={18}
-                                strokeWidth={3}
-                              />
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-400/10 text-green-400 text-xs font-medium">
+                                <Check size={12} strokeWidth={3} />
+                                完成
+                              </span>
                             ) : (
-                              <span className="text-red-400 text-sm">✕</span>
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-400/10 text-red-400 text-xs font-medium">
+                                失败
+                              </span>
                             )}
                           </div>
 
@@ -846,8 +1034,7 @@ const Home: React.FC = () => {
                         </div>
                       ))}
                     {/* PPT 大纲卡片 */}
-                    {(item.ppt_outline ||
-                      (item as any).message_type === "ppt") && (
+                    {item.ppt_outline && (
                       <div
                         onClick={() => {
                           toggleChat(false);
@@ -864,21 +1051,7 @@ const Home: React.FC = () => {
                       >
                         <div className="flex items-center gap-2">
                           <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary/25 to-primary/5 text-primary">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="20"
-                              height="20"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M2 3h20" />
-                              <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
-                              <path d="m7 21 5-5 5 5" />
-                            </svg>
+                            <IconPresentation className="w-5 h-5" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className="text-sm font-semibold text-[var(--Ai-content-text)]">
@@ -891,26 +1064,32 @@ const Home: React.FC = () => {
                             )}
                           </div>
                           <div className="flex-shrink-0 flex items-center">
-                            {item.ppt_slide_status &&
-                            Object.values(item.ppt_slide_status).every(
-                              (s) => s === "done",
-                            ) ? (
-                              <Check
-                                className="text-green-400"
-                                size={18}
-                                strokeWidth={3}
-                              />
+                            {!item.ppt_outline ? (
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                                <Loader2 className="animate-spin" size={12} />
+                                搜索中
+                              </span>
+                            ) : item.ppt_outline_status === "pending" ? (
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-400/10 text-yellow-400 text-xs font-medium">
+                                待确认
+                              </span>
+                            ) : item.ppt_outline_status === "generating" ? (
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                                <Loader2 className="animate-spin" size={12} />
+                                生成中
+                              </span>
                             ) : item.ppt_slide_status &&
-                              Object.values(item.ppt_slide_status).some(
-                                (s) => s === "loading",
+                              Object.values(item.ppt_slide_status).every(
+                                (s) => s === "done",
                               ) ? (
-                              <Loader2
-                                className="animate-spin text-primary"
-                                size={18}
-                              />
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-400/10 text-green-400 text-xs font-medium">
+                                <Check size={12} strokeWidth={3} />
+                                完成
+                              </span>
                             ) : (
-                              <span className="text-xs text-[var(--Ai-think-text)]">
-                                准备就绪
+                              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                                <Loader2 className="animate-spin" size={12} />
+                                加载中
                               </span>
                             )}
                           </div>
@@ -961,7 +1140,10 @@ const Home: React.FC = () => {
                               }}
                               title={ref.snippet || ref.filename}
                               onClick={() =>
-                                handleOpenKnowledgeModal(ref.doc_id, ref.filename)
+                                handleOpenKnowledgeModal(
+                                  ref.doc_id,
+                                  ref.filename,
+                                )
                               }
                             >
                               <div
@@ -1001,9 +1183,11 @@ const Home: React.FC = () => {
                               content={item.content}
                               isFinished={item.finished}
                             />
-                            {item.finished && (
-                              <EAActionBar content={item.content} />
-                            )}
+                            {item.finished &&
+                              !(
+                                item.message_type === "ppt" &&
+                                item.ppt_outline_status === "generating"
+                              ) && <EAActionBar content={item.content} />}
                           </div>
                         ) : (
                           <div className="group flex flex-col gap-2 items-end relative">
@@ -1082,20 +1266,7 @@ const Home: React.FC = () => {
                                               "var(--Ai-think-bg)",
                                           }}
                                         >
-                                          <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="18"
-                                            height="18"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                          >
-                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                            <polyline points="14 2 14 8 20 8" />
-                                          </svg>
+                                          <IconFileText className="w-[18px] h-[18px]" />
                                         </div>
                                         <div className="flex flex-col gap-1.5 min-w-0 leading-tight">
                                           <span className="text-[12px] max-w-[180px] text-[var(--chat-text)] leading-none">
@@ -1116,21 +1287,48 @@ const Home: React.FC = () => {
                             </div>
 
                             <div className="absolute bottom-[-25px] right-0 opacity-0 group-hover:opacity-100 transition">
-                              <EAActionBar
-                                content={item.content}
-                                onlyCopy={true}
-                              />
+                              {item.finished && (
+                                <EAActionBar
+                                  content={item.content}
+                                  onlyCopy={true}
+                                />
+                              )}
                             </div>
                           </div>
                         )}
                       </div>
                     )}
+                    {/* AI消息流式生成中显示加载动画 */}
+                    {item.sender === 1 && !item.finished && loading && (
+                      <div className="w-[60%] max-w-[670px] flex justify-start">
+                        <EALoader text="正在生成回复..." />
+                      </div>
+                    )}
+                    {item.sender === 1 &&
+                      item.ppt_outline_status === "generating" &&
+                      pptGenerating && (
+                        <div className="w-[60%] max-w-[670px] flex justify-start">
+                          <EALoader text="正在生成PPT..." />
+                        </div>
+                      )}
+                    {item.sender === 1 && pptRegenerating && (
+                      <div className="w-[60%] max-w-[670px] flex justify-start">
+                        <EALoader text="正在重新生成大纲..." />
+                      </div>
+                    )}
                   </div>
                 );
               })}
-              <div className="w-[60%] max-w-[670px] flex justify-start">
-                {loading && <EALoader text="Generating" />}
-              </div>
+              {/* 用户发送消息后立即显示加载动画（AI消息尚未创建时） */}
+              {loading &&
+                messages.length > 0 &&
+                messages[messages.length - 1].sender === 0 && (
+                  <div className="w-[60%] max-w-[670px] flex justify-start">
+                    <EALoader
+                      text={inputMode === "ppt" ? "正在生成大纲..." : "正在思考..."}
+                    />
+                  </div>
+                )}
             </div>
 
             <div
@@ -1153,8 +1351,8 @@ const Home: React.FC = () => {
                 inputValue={inputValue}
                 setInputValue={setInputValue}
                 sendMessage={handleSend}
-                loading={loading}
-                onStop={stopStreaming}
+                loading={loading || pptGenerating || pptRegenerating}
+                onStop={handleStopStreaming}
                 className="w-[60%] max-w-[680px] mr-3"
                 mode={inputMode}
                 setMode={setInputMode}
@@ -1185,6 +1383,11 @@ const Home: React.FC = () => {
         handleChatClick={handleChatClick}
         chatList={chatList}
         getHistoryList={getHisttoryList}
+        onConfirmOutline={handleConfirmOutline}
+        onCancelOutline={handleCancelOutline}
+        onRegenerateOutline={handleRegenerateOutline}
+        confirmOutlineLoading={pptConfirmLoading}
+        regenerating={pptRegenerating}
       />
 
       <EAModal
@@ -1228,51 +1431,14 @@ const Home: React.FC = () => {
             <EAButton
               text="删除账号"
               onClick={() => {
-                handleLogout();
+                handleIconLogout();
                 handleClose();
               }}
               className="bg-red-300 text-[red]"
-              icon={
-                <svg
-                  viewBox="0 0 1024 1024"
-                  version="1.1"
-                  xmlns="http://www.w3.org/2000/svg"
-                  p-id="6948"
-                  width="18"
-                  height="18"
-                >
-                  <path
-                    d="M512 544c12.8 0 25.6-12.8 25.6-25.6V64c0-12.8-12.8-25.6-25.6-25.6s-25.6 12.8-25.6 25.6v448c0 19.2 12.8 32 25.6 32z m224-448c-51.2 6.4-25.6 44.8-25.6 44.8 134.4 70.4 224 211.2 224 371.2 0 230.4-185.6 422.4-422.4 422.4s-422.4-192-422.4-422.4c0-160 89.6-294.4 217.6-364.8 12.8-44.8-25.6-44.8-25.6-44.8C134.4 179.2 38.4 332.8 38.4 512c0 262.4 211.2 473.6 473.6 473.6 262.4 0 473.6-211.2 473.6-473.6 0-179.2-102.4-339.2-249.6-416z"
-                    p-id="6949"
-                    stroke="currentColor"
-                    fill="var(--chat-text)"
-                    strokeWidth={40}
-                  ></path>
-                </svg>
-              }
+              icon={<IconDeleteUser className="w-[18px] h-[18px]" />}
             />
             <EAButton
-              icon={
-                <svg
-                  viewBox="0 0 1024 1024"
-                  version="1.1"
-                  xmlns="http://www.w3.org/2000/svg"
-                  p-id="5926"
-                  width="18"
-                  height="18"
-                >
-                  <g stroke="currentColor" fill="var(--chat-text)">
-                    <path
-                      d="M0 192v640c0 70.7 57.3 128 128 128h352c17.7 0 32-14.3 32-32s-14.3-32-32-32H128c-35.3 0-64-28.7-64-64V192c0-35.3 28.7-64 64-64h352c17.7 0 32-14.3 32-32s-14.3-32-32-32H128C57.3 64 0 121.3 0 192z"
-                      p-id="5927"
-                    ></path>
-                    <path
-                      d="M1013.3 488.3L650.9 160.7c-41.2-37.2-106.9-8-106.9 47.5V339c0 4.4-3.6 8-8 8H224c-17.7 0-32 14.3-32 32v266c0 17.7 14.3 32 32 32h312c4.4 0 8 3.6 8 8v130.9c0 55.5 65.8 84.7 106.9 47.5l362.4-327.6c14.1-12.8 14.1-34.8 0-47.5zM256 597V427c0-8.8 7.2-16 16-16h304c17.7 0 32-14.3 32-32V244.9c0-13.9 16.4-21.2 26.7-11.9L938 506.1c3.5 3.2 3.5 8.7 0 11.9L634.7 791c-10.3 9.3-26.7 2-26.7-11.9V645c0-17.7-14.3-32-32-32H272c-8.8 0-16-7.2-16-16z"
-                      p-id="5928"
-                    ></path>
-                  </g>
-                </svg>
-              }
+              icon={<IconLogout className="w-[18px] h-[18px]" />}
               text="退出登录"
               onClick={() => {
                 showLoading();

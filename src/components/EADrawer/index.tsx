@@ -8,6 +8,7 @@ import {
   type ToolCall,
 } from "@/store/store";
 import { Empty } from "antd";
+import { Loader2 } from "lucide-react";
 import Weather from "./ToolPage/Weather";
 import Texts from "./ToolPage/Texts";
 import News from "./ToolPage/News";
@@ -27,6 +28,7 @@ import dayjs from "dayjs";
 import UserChatIcon from "@/LootieJson/UserChat.json";
 import EAMessage from "../EAMessage";
 import SearchInput from "./ToolPage/SearchInput";
+import { IconEdit } from "@/assets/icons";
 import Lottie from "lottie-react";
 import SystemMessage from "./ToolPage/SystemMessage";
 import PPT from "./ToolPage/PPT";
@@ -40,6 +42,11 @@ interface EADrawerSchema {
   handleChatClick: (id: number) => void;
   getFriendListApi: () => void;
   selectedToolCallId?: number | null;
+  onConfirmOutline?: (outline: { style: any; slides: any[] }) => void;
+  onCancelOutline?: () => void;
+  onRegenerateOutline?: () => void;
+  confirmOutlineLoading?: boolean;
+  regenerating?: boolean;
 }
 
 interface ShareChatSchema {
@@ -57,6 +64,11 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   handleChatClick,
   getFriendListApi,
   selectedToolCallId,
+  onConfirmOutline,
+  onCancelOutline,
+  onRegenerateOutline,
+  confirmOutlineLoading,
+  regenerating,
 }) => {
   const chatOpen = useStore((state) => state.chatOpen);
   const [active, setActive] = useState("news"); // 当前高亮 tab
@@ -80,7 +92,8 @@ const EADrawer: React.FC<EADrawerSchema> = ({
 
   // 同步 activeToolCallId 与父组件传入的 selectedToolCallId / message.tool_calls
   useEffect(() => {
-    const toolCalls = message?.tool_calls?.filter((tc) => tc.tool_name !== "ppt") ?? [];
+    const toolCalls =
+      message?.tool_calls?.filter((tc) => tc.tool_name !== "ppt") ?? [];
     // 优先使用父组件传入的 selectedToolCallId
     if (
       selectedToolCallId &&
@@ -94,9 +107,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       return;
     }
     // 当前选中的工具调用仍然有效时，保持不变（动态更新内容）
-    const stillValid = toolCalls.some(
-      (call) => call.id === activeToolCallId,
-    );
+    const stillValid = toolCalls.some((call) => call.id === activeToolCallId);
     if (!stillValid) {
       setActiveToolCallId(toolCalls[0].id);
     }
@@ -572,7 +583,10 @@ const EADrawer: React.FC<EADrawerSchema> = ({
   })();
 
   // 过滤掉 PPT 的工具调用列表
-  const nonPptToolCalls = message?.tool_calls?.filter((tc) => tc.tool_name !== "ppt") ?? [];
+  const nonPptToolCalls =
+    message?.tool_calls?.filter(
+      (tc) => tc.tool_name !== "ppt" && tc.tool_name !== "ppt_outline",
+    ) || [];
 
   /** Drawer 主体必须 return */
   return (
@@ -819,14 +833,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-3">
                               <div className="flex-shrink-0">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-5 w-5 text-blue-500"
-                                  viewBox="0 0 20 20"
-                                  fill="currentColor"
-                                >
-                                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                                </svg>
+                                <IconEdit className="h-5 w-5 text-blue-500" />
                               </div>
                               <div>
                                 <p className="text-sm font-medium text-gray-900">
@@ -894,60 +901,79 @@ const EADrawer: React.FC<EADrawerSchema> = ({
               style={{ display: selectedIsNonPptTool ? "none" : "block" }}
             >
               {message?.ppt_outline ? (
-                <PPT message={message} />
-              ) : (() => {
-                const pptTool = message?.tool_calls?.find(
-                  (tc) => tc.tool_name === "ppt",
-                );
-                if (pptTool?.tool_content) {
-                  try {
-                    const pptData =
-                      typeof pptTool.tool_content === "string"
-                        ? JSON.parse(pptTool.tool_content)
-                        : pptTool.tool_content;
-                    if (pptData.slides && pptData.outline) {
-                      const pptMessage: ChatItem = {
-                        ...message!,
-                        ppt_outline: pptData.outline,
-                        ppt_style: pptData.style,
-                        ppt_slides: Object.fromEntries(
-                          pptData.slides.map((s: any) => [s.index, s.html]),
-                        ),
-                        ppt_slide_status: Object.fromEntries(
-                          pptData.slides.map((s: any) => [
-                            s.index,
-                            "done" as const,
-                          ]),
-                        ),
-                      };
-                      return <PPT message={pptMessage} />;
+                <PPT
+                  message={message}
+                  onConfirmOutline={onConfirmOutline}
+                  onCancelOutline={onCancelOutline}
+                  onRegenerateOutline={onRegenerateOutline}
+                  confirmLoading={confirmOutlineLoading}
+                  regenerating={regenerating}
+                />
+              ) : message?.message_type === "ppt" && !message?.finished ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3">
+                  <Loader2 className="animate-spin text-primary" size={32} />
+                  <span className="text-sm text-[var(--Ai-think-text)]">
+                    正在生成 PPT 大纲...
+                  </span>
+                </div>
+              ) : (
+                (() => {
+                  const pptTool = message?.tool_calls?.find(
+                    (tc) => tc.tool_name === "ppt",
+                  );
+                  if (pptTool?.tool_content) {
+                    try {
+                      const pptData =
+                        typeof pptTool.tool_content === "string"
+                          ? JSON.parse(pptTool.tool_content)
+                          : pptTool.tool_content;
+                      if (pptData.slides && pptData.outline) {
+                        const pptMessage: ChatItem = {
+                          ...message!,
+                          ppt_outline: pptData.outline,
+                          ppt_style: pptData.style,
+                          ppt_slides: Object.fromEntries(
+                            pptData.slides.map((s: any) => [s.index, s.html]),
+                          ),
+                          ppt_slide_status: Object.fromEntries(
+                            pptData.slides.map((s: any) => [
+                              s.index,
+                              "done" as const,
+                            ]),
+                          ),
+                        };
+                        return <PPT message={pptMessage} />;
+                      }
+                    } catch {
+                      // parse error
                     }
-                  } catch {
-                    // parse error
                   }
-                }
-                return (
-                  <div className="p-4">
-                    <div className="rounded-lg overflow-hidden border border-white/10 shadow-lg">
-                      <div className="flex items-center gap-2 px-4 py-2 bg-[var(--code-head)]">
-                        <span className="text-sm font-semibold text-[var(--Ai-content-text)]">
-                          PPT 演示
-                        </span>
-                      </div>
-                      <div className="p-4 text-sm text-[var(--Ai-content-text)]">
-                        {message?.content || "PPT 数据加载失败"}
+                  return (
+                    <div className="p-4">
+                      <div className="rounded-lg overflow-hidden border border-white/10 shadow-lg">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--code-head)]">
+                          <span className="text-sm font-semibold text-[var(--Ai-content-text)]">
+                            PPT 演示
+                          </span>
+                        </div>
+                        <div className="p-4 text-sm text-[var(--Ai-content-text)]">
+                          {message?.content || "PPT 数据加载失败"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()
+              )}
             </div>
           )}
           {/* 工具内容：PPT 可见时隐藏 */}
           {nonPptToolCalls.length > 0 && (
             <div
               className="h-full"
-              style={{ display: isPPT && !selectedIsNonPptTool ? "none" : "flex", flexDirection: "column" }}
+              style={{
+                display: isPPT && !selectedIsNonPptTool ? "none" : "flex",
+                flexDirection: "column",
+              }}
             >
               {renderToolContent()}
             </div>
