@@ -17,9 +17,9 @@ const SignupPage = (props: { handleChange: (value: boolean) => void }) => {
     if (values) {
       const payload = values;
       const result = await register(payload);
-      if (result.data.success) {
-        localStorage.setItem("token", result.data.data.access_token);
-        setUser(result.data.data.user);
+      if (result.success) {
+        localStorage.setItem("token", result.data.access_token);
+        setUser(result.data.user);
         showLoading();
         setTimeout(() => {
           navigate("/");

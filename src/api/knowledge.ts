@@ -44,30 +44,30 @@ export interface UploadDocResponse {
 export function uploadDoc(file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return request.post("/knowledge/upload_doc", formData);
+  return request.post<UploadDocResponse>("/knowledge/upload_doc", formData);
 }
 
 // 2. 获取全局文档列表
 export function getGlobalDocList() {
-  return request.get("/knowledge/get_doc_list");
+  return request.get<DocItem[]>("/knowledge/get_doc_list");
 }
 
 // 3. 获取会话专属文档列表
 export function getChatDocList(chatId: number) {
-  return request.get(`/knowledge/get_chat_doc_list/${chatId}`);
+  return request.get<DocItem[]>(`/knowledge/get_chat_doc_list/${chatId}`);
 }
 
 // 4. 删除文档
 export function deleteDoc(docId: number) {
-  return request.delete(`/knowledge/delete_doc/${docId}`);
+  return request.delete<null>(`/knowledge/delete_doc/${docId}`);
 }
 
 // 5. 获取文档内容
 export function getDocContent(docId: number) {
-  return request.get(`/knowledge/get_doc_content/${docId}`);
+  return request.get<DocContent>(`/knowledge/get_doc_content/${docId}`);
 }
 
 // 6. 重试失败文档
 export function retryDoc(docId: number) {
-  return request.post(`/knowledge/retry_doc/${docId}`);
+  return request.post<null>(`/knowledge/retry_doc/${docId}`);
 }

@@ -27,8 +27,8 @@ const EAKnowledge: React.FC<EAKnowledgeProps> = ({ onDocListChange }) => {
   const fetchDocList = async () => {
     try {
       const res = await getGlobalDocList();
-      if (res.data.success) {
-        setDocList(res.data.data);
+      if (res.success) {
+        setDocList(res.data);
         onDocListChange?.();
       }
     } catch {
@@ -46,7 +46,7 @@ const EAKnowledge: React.FC<EAKnowledgeProps> = ({ onDocListChange }) => {
     setUploading(true);
     try {
       const res = await uploadDoc(file);
-      if (res.data.success) {
+      if (res.success) {
         EAMessage.success("上传成功，正在处理中");
         fetchDocList();
       }

@@ -27,16 +27,16 @@ const LoginPage = (props: {
         password: password,
       };
       const result = await login(payload);
-      if (result.data.success) {
+      if (result.success) {
         showLoading();
         setTimeout(() => {
           setIsLoading(false);
-          localStorage.setItem("token", result.data.data.access_token);
-          setUser(result.data.data.user);
+          localStorage.setItem("token", result.data.access_token);
+          setUser(result.data.user);
           navigate("/");
         }, 1000);
       } else {
-        EAMessage.error(result.data.message);
+        EAMessage.error(result.message);
         setIsLoading(false);
       }
     }

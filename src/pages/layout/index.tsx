@@ -156,6 +156,8 @@ const Home: React.FC = () => {
     null,
   );
   const [knowledgeModalDocName, setKnowledgeModalDocName] = useState("");
+  const [knowledgeModalSnippet, setKnowledgeModalSnippet] = useState("");
+  const [knowledgeModalChunkIndex, setKnowledgeModalChunkIndex] = useState<number | undefined>();
 
   // 全局拖拽上传
   const [isDragOver, setIsDragOver] = useState(false);
@@ -197,8 +199,8 @@ const Home: React.FC = () => {
   // 获取历史记录
   const getHisttoryList = async () => {
     const res = await getChatRecords({});
-    if (res.data.success) {
-      setChatList(res.data.data.chat_list as ChatItem[]);
+    if (res.success) {
+      setChatList(res.data.chat_list as ChatItem[]);
     }
   };
   // 获取工具图标
@@ -250,7 +252,7 @@ const Home: React.FC = () => {
     window.addEventListener("dragover", preventFileOpen);
     window.addEventListener("drop", preventFileOpen);
     getGlobalDocList().then((res) => {
-      if (res.data.success) setDocList(res.data.data);
+      if (res.success) setDocList(res.data);
     });
 
     updatedSocket(createChatSocket(userInfo?.id as number));
@@ -276,29 +278,29 @@ const Home: React.FC = () => {
 
   const getFriendListApi = async () => {
     const result = await getUnreadMessageList();
-    if (result.data.success) {
-      updateUnReadMsg(result.data.data);
+    if (result.success) {
+      updateUnReadMsg(result.data);
     }
     const response = await getAllMessageList();
-    if (response.data.success) {
-      updateAllChatMsg(response.data.data);
+    if (response.success) {
+      updateAllChatMsg(response.data);
     }
     const systemInfoRes = await getSystemInfoList();
-    if (systemInfoRes.data.success) {
-      useStore.setState({ systemInfo: systemInfoRes.data.data });
+    if (systemInfoRes.success) {
+      useStore.setState({ systemInfo: systemInfoRes.data });
     }
     const res = await getFriendList();
-    if (systemInfoRes.data.data) {
+    if (systemInfoRes.data) {
       updateUserFriend([
-        ...res.data.data,
+        ...res.data,
         {
-          id: "system",
+          id: "system" as unknown as number,
           status: 0,
           created_at:
-            (systemInfoRes.data.data ?? []).at(-1)?.created_at ??
+            (systemInfoRes.data ?? []).at(-1)?.created_at ??
             new Date().toISOString(),
           friend: {
-            id: "system",
+            id: "system" as unknown as number,
             name: "系统消息",
             avatar: IconLogoUrl,
           },
@@ -322,7 +324,7 @@ const Home: React.FC = () => {
     setSelectedMessageId(null);
     setSelectedToolCallId(null);
     const res = await getChatContent(id);
-    if (res.data.success) {
+    if (res.success) {
       const safeParse = (val: unknown) => {
         if (typeof val !== "string") return val;
         const trimmed = val.trim();
@@ -333,7 +335,7 @@ const Home: React.FC = () => {
           return val;
         }
       };
-      const messagesWithType = (res.data.data as ChatItemStore[]).map(
+      const messagesWithType = (res.data as ChatItemStore[]).map(
         (item) => {
           const base: any = {
             ...item,
@@ -449,8 +451,8 @@ const Home: React.FC = () => {
       for (const file of newFiles) {
         try {
           const res = await uploadChatFile(file);
-          if (res.data.success) {
-            setUploadedFiles((prev) => [...prev, res.data.data]);
+          if (res.success) {
+            setUploadedFiles((prev) => [...prev, res.data]);
           } else {
             EAMessage.error(`${file.name} 上传失败`);
           }
@@ -473,7 +475,7 @@ const Home: React.FC = () => {
 
   const refreshDocList = useCallback(() => {
     getGlobalDocList().then((res) => {
-      if (res.data.success) setDocList(res.data.data);
+      if (res.success) setDocList(res.data);
     });
   }, []);
 
@@ -573,8 +575,8 @@ const Home: React.FC = () => {
           id: chatId,
           message: sendText,
         });
-        if (result.data.success) {
-          const newChatId = result.data.data.id;
+        if (result.success) {
+          const newChatId = result.data.id;
           setCurrentChatId(newChatId);
           setSelectedMenuKey(newChatId.toString());
           getHisttoryList();
@@ -637,7 +639,7 @@ const Home: React.FC = () => {
   // 注销账户
   const handleIconLogout = async () => {
     const res = await logout();
-    if (res.data.success) {
+    if (res.success) {
       showLoading();
       setTimeout(() => {
         localStorage.removeItem("token");
@@ -667,11 +669,11 @@ const Home: React.FC = () => {
       const res = await uploadFile(formData);
 
       if (userInfo?.id) {
-        setUser({ ...userInfo, avatar: res.data.data.url });
+        setUser({ ...userInfo, avatar: res.data.url });
       }
       const result = await updateUserInfo({
         name: userInfo?.name as string,
-        avatar: res.data.data.url,
+        avatar: res.data.url,
         email: userInfo?.email as string,
       });
       console.log(result);
@@ -701,9 +703,9 @@ const Home: React.FC = () => {
       email: userEmail as string,
     };
     const res = await updateUserInfo(payload);
-    if (res.data.success) {
-      setUser(res.data.data);
-      EAMessage.success(res.data.message);
+    if (res.success) {
+      setUser(res.data);
+      EAMessage.success(res.message);
     } else {
       setUserEmail(userInfo?.email);
       setUserName(userInfo?.name);
@@ -802,9 +804,11 @@ const Home: React.FC = () => {
     }
   }, [pptOutlineMsgId, pptOutlineBackendMsgId, streamOutline]);
 
-  const handleOpenKnowledgeModal = (docId: number, docName: string) => {
+  const handleOpenKnowledgeModal = (docId: number, docName: string, snippet?: string, chunkIndex?: number) => {
     setKnowledgeModalDocId(docId);
     setKnowledgeModalDocName(docName);
+    setKnowledgeModalSnippet(snippet ?? "");
+    setKnowledgeModalChunkIndex(chunkIndex);
     setKnowledgeModalOpen(true);
   };
 
@@ -1143,6 +1147,8 @@ const Home: React.FC = () => {
                                 handleOpenKnowledgeModal(
                                   ref.doc_id,
                                   ref.filename,
+                                  ref.snippet,
+                                  ref.chunk_index,
                                 )
                               }
                             >
@@ -1480,10 +1486,14 @@ const Home: React.FC = () => {
         open={knowledgeModalOpen}
         docId={knowledgeModalDocId}
         docName={knowledgeModalDocName}
+        snippet={knowledgeModalSnippet}
+        chunkIndex={knowledgeModalChunkIndex}
         onClose={() => {
           setKnowledgeModalOpen(false);
           setKnowledgeModalDocId(null);
           setKnowledgeModalDocName("");
+          setKnowledgeModalSnippet("");
+          setKnowledgeModalChunkIndex(undefined);
         }}
         onDeleted={refreshDocList}
       />

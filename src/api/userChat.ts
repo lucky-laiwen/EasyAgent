@@ -1,7 +1,8 @@
 import request from "@/utils/axios";
+import type { UserChatSchema } from "@/store/store";
 
 export const getHistory = (receiver_id: number) => {
-  return request.get(`/user_chat/get_chat_history/${receiver_id}`);
+  return request.get<UserChatSchema[]>(`/user_chat/get_chat_history/${receiver_id}`);
 };
 
 // ws.ts
@@ -11,15 +12,15 @@ export function createChatSocket(user_id: number) {
 
 // 查询未读消息
 export const getUnreadMessageList = () => {
-  return request.get(`/user_chat/get_unread_messages`);
+  return request.get<UserChatSchema[]>(`/user_chat/get_unread_messages`);
 };
 
 // 查询当前用户所有消息
 export const getAllMessageList = () => {
-  return request.get(`/user_chat/get_all_messages`);
+  return request.get<UserChatSchema[]>(`/user_chat/get_all_messages`);
 };
 
 // 确认接收分享的消息
 export const confirmReceiveSharedMessage = (chat_id: number) => {
-  return request.get(`/user_chat/accept_share/${chat_id}`);
+  return request.get<null>(`/user_chat/accept_share/${chat_id}`);
 };

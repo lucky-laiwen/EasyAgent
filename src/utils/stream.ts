@@ -108,7 +108,6 @@ export function useStreamAIMessage() {
               updateMessage({
                 id: aiMessageId,
                 ppt_outline: chunk.slides,
-                ppt_style: chunk.style,
                 message_type: "ppt",
               });
               break;
@@ -296,7 +295,6 @@ export function useStreamPpt() {
               updateMessage({
                 id: aiMessageId,
                 ppt_outline: chunk.slides,
-                ppt_style: chunk.style,
                 ppt_outline_status: "pending",
                 message_type: "ppt",
                 content: "",
@@ -343,10 +341,10 @@ export function useStreamPpt() {
       outlineMessageId: number,
       outline: { style: any; slides: any[] },
     ) => {
-      // 1. 提交修改后的大纲
+      // 1. 提交修改后的大纲（只需 slides）
       const updateRes = await updateOutline({
         message_id: outlineMessageId,
-        outline,
+        outline: { slides: outline.slides },
       });
       if (!updateRes.success) {
         throw new Error(updateRes.message || "大纲更新失败");
@@ -361,14 +359,14 @@ export function useStreamPpt() {
         ppt_style: outline.style,
       });
 
-      // 3. 开始生成 PPT
+      // 3. 开始生成 PPT（带上 style）
       aiMsgIdRef.current = aiMessageId;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
       try {
         for await (const chunk of sendPptGenerate(
-          { id: chatId, message_id: outlineMessageId },
+          { id: chatId, message_id: outlineMessageId, style: outline.style },
           controller.signal,
         ) as AsyncIterable<any>) {
           switch (chunk.type) {

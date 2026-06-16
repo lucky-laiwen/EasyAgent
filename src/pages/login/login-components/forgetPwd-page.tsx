@@ -11,7 +11,7 @@ const ForgetPwdPage = (props: { handleChange: (value: boolean) => void }) => {
   const handleChange = props.handleChange;
   const onFinish = async (values: FieldType) => {
     const result = await forgetPassword(values);
-    if (result.data.success) {
+    if (result.success) {
       handleChange(false);
     }
   };

@@ -39,7 +39,7 @@ const EAMenu: React.FC<EAMenuProps> = ({
   const handleRename = async (id: number) => {
     setIsLoading(true);
     const res = await updateChatTitle({ id, message: inputText });
-    if (res.data.success) {
+    if (res.success) {
       getHisttoryList?.();
       setInputText("");
       setIsOpen(undefined);
@@ -51,7 +51,7 @@ const EAMenu: React.FC<EAMenuProps> = ({
   const handleDelete = async (id: number) => {
     setIsLoading(true);
     const res = await deleteChat(id);
-    if (res.data.success) {
+    if (res.success) {
       if (selectedKey === id.toString()) {
         setMessages([]);
         deleteCurChat?.();
@@ -68,7 +68,7 @@ const EAMenu: React.FC<EAMenuProps> = ({
   const handleUnshare = async (id: number) => {
     setIsLoading(true);
     const res = await unShareChat(id);
-    if (res.data.success) {
+    if (res.success) {
       if (selectedKey === id.toString()) {
         setMessages([]);
         deleteCurChat?.();

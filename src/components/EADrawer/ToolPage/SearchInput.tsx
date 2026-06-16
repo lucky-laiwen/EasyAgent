@@ -37,8 +37,8 @@ const SearchInput = () => {
       }
       setLoading(true);
       const res = await searchFriend({ friend_name: value });
-      if (res.data.success) {
-        setSearchResult(res.data.data);
+      if (res.success) {
+        setSearchResult(res.data);
         setLoading(false);
       }
     }, 500);
@@ -63,14 +63,14 @@ const SearchInput = () => {
   const handleAddFriend = async (id: number) => {
     setBtnLoading(true);
     const res = await addFriend({ friend_id: id });
-    if (res.data.success) {
+    if (res.success) {
       setBtnLoading(false);
       debouncedSearch(searchValue);
       socketRef?.send(
         JSON.stringify({
           to_user_id: id,
           type: "add_friend",
-          recipient_data: res.data.data,
+          recipient_data: res.data,
           sender_data: userInfo,
         }),
       );

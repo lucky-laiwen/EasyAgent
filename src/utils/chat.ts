@@ -75,7 +75,13 @@ export async function* sendMessage(
 
 // 生成 PPT 大纲 (SSE)；传入 message_id 则为重新生成（只需 message_id）
 export async function* sendPptOutline(
-  params: { id?: number; message?: string; doc_ids?: number[]; file_ids?: number[]; message_id?: number },
+  params: {
+    id?: number;
+    message?: string;
+    doc_ids?: number[];
+    file_ids?: number[];
+    message_id?: number;
+  },
   signal?: AbortSignal,
 ): AsyncGenerator<Record<string, any>, void, unknown> {
   const res = await fetch("http://localhost:8000/chat/ppt_outline", {
@@ -87,10 +93,10 @@ export async function* sendPptOutline(
   yield* readSSEStream(res);
 }
 
-// 更新 PPT 大纲 (REST)
+// 更新 PPT 大纲 (REST)（只需 slides，style 由用户在前端选择后随 ppt_generate 传递）
 export async function updateOutline(data: {
   message_id: number;
-  outline: { style: any; slides: any[] };
+  outline: { slides: any[] };
 }) {
   const res = await fetch("http://localhost:8000/chat/update_outline", {
     method: "POST",
@@ -100,9 +106,9 @@ export async function updateOutline(data: {
   return res.json();
 }
 
-// 生成 PPT 幻灯片 (SSE)
+// 生成 PPT 幻灯片 (SSE)，需携带用户选择的 style
 export async function* sendPptGenerate(
-  params: { id: number; message_id: number },
+  params: { id: number; message_id: number; style?: Record<string, any> },
   signal?: AbortSignal,
 ): AsyncGenerator<Record<string, any>, void, unknown> {
   const res = await fetch("http://localhost:8000/chat/ppt_generate", {

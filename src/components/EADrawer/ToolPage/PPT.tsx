@@ -15,6 +15,7 @@ import {
   Upload,
   X,
   Eye,
+  Maximize,
 } from "lucide-react";
 import { message as antdMessage, Image as AntdImage } from "antd";
 import { uploadChatFile } from "@/api/chat";
@@ -22,6 +23,7 @@ import EAModal from "@/components/EAModal";
 import type { ChatItem, PptSlideOutline } from "@/store/store";
 
 const SLIDE_WIDTH = 1280;
+const SLIDE_HEIGHT = 720;
 type TabKey = "ppt" | "html" | "outline";
 
 // ========== SlideIframe（无变化） ==========
@@ -31,14 +33,13 @@ const SlideIframe = memo(
     const containerRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [scale, setScale] = useState(1);
-    const [iframeHeight, setIframeHeight] = useState(720);
+    const [iframeHeight, setIframeHeight] = useState(SLIDE_HEIGHT);
 
     const recalc = useCallback(() => {
       const container = containerRef.current;
       const iframe = iframeRef.current;
       if (!container) return;
-      const s = container.offsetWidth / SLIDE_WIDTH;
-      setScale(s);
+      setScale(container.offsetWidth / SLIDE_WIDTH);
 
       try {
         const doc = iframe?.contentDocument?.documentElement;
@@ -373,9 +374,9 @@ const OutlineEditor = memo(
     const [slides, setSlides] = useState<PptSlideOutline[]>(
       message.ppt_outline ?? [],
     );
-    const [style, setStyle] = useState(message.ppt_style ?? {});
+    // 后端不再返回 style，使用第一个预设主题作为默认值
+    const [style, setStyle] = useState(message.ppt_style ?? PRESET_THEMES[0]);
     const [editingSlide, setEditingSlide] = useState<number | null>(null);
-    const [showStylePanel, setShowStylePanel] = useState(false);
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const [uploadingSlide, setUploadingSlide] = useState<number | null>(null);
@@ -572,7 +573,7 @@ const OutlineEditor = memo(
         setUploadingSlide(targetSlide);
         try {
           const res = await uploadChatFile(file);
-          const fileUrl = res.data?.data?.file_url;
+          const fileUrl = res.data?.file_url;
           if (!fileUrl) {
             antdMessage.error("图片上传失败：未获取到URL");
             return;
@@ -618,56 +619,44 @@ const OutlineEditor = memo(
               {slides.length} 页
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowStylePanel(!showStylePanel)}
-              className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-md bg-black/10 text-[var(--Ai-think-text)] hover:text-[var(--Ai-content-text)] cursor-pointer transition-colors"
-            >
-              <Palette size={12} />
-              样式
-              {showStylePanel ? (
-                <ChevronUp size={10} />
-              ) : (
-                <ChevronDown size={10} />
-              )}
-            </button>
-          </div>
         </div>
 
-        {/* 样式面板 */}
-        {showStylePanel && (
-          <div className="px-4 py-3 border-b border-white/10 bg-[var(--Ai-think-bg)]">
-            <div className="text-[11px] text-[var(--Ai-think-text)] mb-2">
-              预设主题
+        {/* 样式选择 - 常驻展示 */}
+        <div className="mx-4 mt-2 px-4 py-2 rounded-lg bg-[var(--Ai-think-bg)]">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Palette size={12} className="text-[var(--Ai-think-text)]" />
+              <span className="text-[11px] text-[var(--Ai-think-text)]">样式</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex gap-1.5 overflow-x-auto">
               {PRESET_THEMES.map((preset) => {
                 const isSelected = style.primaryColor === preset.primaryColor;
                 return (
                   <button
                     key={preset.name}
                     onClick={() => applyPreset(preset)}
-                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] cursor-pointer transition-all hover:scale-105 ${
-                      isSelected ? "ring-2 ring-white/60 scale-105" : ""
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] cursor-pointer transition-all flex-shrink-0 ${
+                      isSelected
+                        ? "border-2"
+                        : "border border-transparent opacity-70 hover:opacity-100"
                     }`}
                     style={{
                       background: preset.backgroundCSS,
+                      borderColor: isSelected ? preset.primaryColor : undefined,
                       color: preset.textColor,
-                      border: `1px solid ${isSelected ? preset.primaryColor : preset.primaryColor + "40"}`,
                     }}
                   >
                     <span
-                      className="w-2.5 h-2.5 rounded-full"
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                       style={{ backgroundColor: preset.primaryColor }}
                     />
                     {preset.name}
-                    {isSelected && <Check size={10} strokeWidth={3} />}
                   </button>
                 );
               })}
             </div>
           </div>
-        )}
+        </div>
 
         {/* 幻灯片列表 */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
@@ -1118,6 +1107,123 @@ const OutlineEditor = memo(
   },
 );
 
+// ========== 全屏播放 ==========
+
+const FullscreenPresentation = memo(
+  ({
+    outline,
+    slides,
+    onClose,
+  }: {
+    outline: PptSlideOutline[];
+    slides: Record<number, string>;
+    onClose: () => void;
+  }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [current, setCurrent] = useState(0);
+    const [showEndHint, setShowEndHint] = useState(false);
+    const total = outline.length;
+
+    const goNext = useCallback(() => {
+      setCurrent((prev) => {
+        if (prev >= total - 1) {
+          setShowEndHint(true);
+          return prev;
+        }
+        setShowEndHint(false);
+        return prev + 1;
+      });
+    }, [total]);
+
+    const goPrev = useCallback(() => {
+      setShowEndHint(false);
+      setCurrent((prev) => Math.max(prev - 1, 0));
+    }, []);
+
+    // 进入系统全屏
+    useEffect(() => {
+      const el = containerRef.current;
+      if (el && !document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {});
+      }
+      // 浏览器 Esc 退出全屏时同步关闭组件
+      const handleFsChange = () => {
+        if (!document.fullscreenElement) {
+          onClose();
+        }
+      };
+      document.addEventListener("fullscreenchange", handleFsChange);
+      return () => {
+        document.removeEventListener("fullscreenchange", handleFsChange);
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
+      };
+    }, [onClose]);
+
+    useEffect(() => {
+      const handleKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          onClose();
+        } else if (e.key === "ArrowRight" || e.key === " ") {
+          e.preventDefault();
+          if (current >= total - 1 && showEndHint) {
+            onClose();
+          } else {
+            goNext();
+          }
+        } else if (e.key === "ArrowLeft") {
+          goPrev();
+        }
+      };
+      window.addEventListener("keydown", handleKey);
+      return () => window.removeEventListener("keydown", handleKey);
+    }, [onClose, goNext, goPrev, current, total, showEndHint]);
+
+    const rawHtml = slides[current];
+    // 覆盖幻灯片 HTML 中的固定宽高和 overflow:hidden，使其在全屏中自适应
+    const html = useMemo(() => {
+      if (!rawHtml) return rawHtml;
+      let h = rawHtml;
+      // 将 viewport 的 width=1280 替换为 width=device-width
+      h = h.replace(
+        /(<meta\s+name="viewport"[^>]*content="[^"]*?)width=\d+/,
+        "$1width=device-width",
+      );
+      // 在 </head> 前注入覆盖样式
+      const override = `<style>
+        html, body { width: 100% !important; min-width: 0 !important; height: 100% !important; min-height: 0 !important; overflow: auto !important; align-items: center !important; }
+        .slide-content { margin-top: auto !important; margin-bottom: auto !important; }
+      </style>`;
+      h = h.replace("</head>", override + "</head>");
+      return h;
+    }, [rawHtml]);
+
+    return (
+      <div ref={containerRef} className="fixed inset-0 z-[9999] bg-black overflow-y-auto">
+        {html ? (
+          <iframe
+            srcDoc={html}
+            sandbox="allow-scripts allow-same-origin"
+            className="border-none w-full"
+            style={{ height: "100vh" }}
+            title={`Slide ${current + 1}`}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-white/50 text-sm">
+            暂无内容
+          </div>
+        )}
+        {showEndHint && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-white/15 text-white/80 text-sm backdrop-blur-sm z-[10000]">
+            再按一次右键退出全屏
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
 // ========== 主组件 ==========
 
 interface PPTProps {
@@ -1138,6 +1244,7 @@ const PPT = memo(
     confirmLoading,
     regenerating,
   }: PPTProps) => {
+    const [presenting, setPresenting] = useState(false);
     const outline = message.ppt_outline;
     const slides = message.ppt_slides;
     const status = message.ppt_slide_status;
@@ -1175,18 +1282,39 @@ const PPT = memo(
     );
 
     return (
-      <div className="flex flex-col gap-4 p-4">
-        {outline.map((slide) => (
-          <SlideCard
-            key={slide.index}
-            slide={slide}
-            html={slides?.[slide.index]}
-            status={status?.[slide.index]}
-            total={outline.length}
-            globalDisabled={!allDone}
+      <>
+        {/* 全屏播放 */}
+        {presenting && slides && (
+          <FullscreenPresentation
+            outline={outline}
+            slides={slides}
+            onClose={() => setPresenting(false)}
           />
-        ))}
-      </div>
+        )}
+
+        <div className="flex flex-col gap-4 p-4">
+          {outline.map((slide) => (
+            <SlideCard
+              key={slide.index}
+              slide={slide}
+              html={slides?.[slide.index]}
+              status={status?.[slide.index]}
+              total={outline.length}
+              globalDisabled={!allDone}
+            />
+          ))}
+          {/* 全屏播放按钮 */}
+          {allDone && (
+            <button
+              onClick={() => setPresenting(true)}
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-gradient-to-r from-primary/90 to-primary text-white hover:shadow-lg hover:shadow-primary/25 cursor-pointer transition-all text-xs font-medium tracking-wide"
+            >
+              <Maximize size={13} />
+              全屏播放
+            </button>
+          )}
+        </div>
+      </>
     );
   },
 );

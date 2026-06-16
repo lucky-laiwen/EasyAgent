@@ -39,8 +39,8 @@ const SystemMessage: React.FC<SystemMessageProps> = ({
       for (const id of missingIds) {
         try {
           const res = await getUserInfoApi(id);
-          if (res.data.success) {
-            fetchedUsers.push(res.data.data as User);
+          if (res.success) {
+            fetchedUsers.push(res.data as User);
           }
         } catch (err) {
           console.error("getUserInfoApi error:", err);

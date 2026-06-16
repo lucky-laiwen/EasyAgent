@@ -251,8 +251,8 @@ const EADrawer: React.FC<EADrawerSchema> = ({
       }),
     );
     const res = await getAllMessageList();
-    if (res.data.success) {
-      updateAllChatMsg(res.data.data || []);
+    if (res.success) {
+      updateAllChatMsg(res.data || []);
     }
     setShareChat(null);
 
@@ -291,7 +291,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     } else if (typeof id === "number") {
       isSystem.current = false;
       const res = await getHistory(id);
-      updateUserChat(res.data.data || []);
+      updateUserChat(res.data || []);
       const filteredFriend = userFriend.filter((item) => item.friend.id === id);
       curFriendInfo.current =
         filteredFriend.length > 0 ? filteredFriend[0] : null;
@@ -556,7 +556,7 @@ const EADrawer: React.FC<EADrawerSchema> = ({
     }
     if (msg.share_chat?.chat_id) {
       const res = await confirmReceiveSharedMessage(msg.share_chat.id);
-      if (res.data.success) {
+      if (res.success) {
         getHistoryList?.();
         handleChatClick(msg.share_chat.chat_id);
       } else {
